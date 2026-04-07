@@ -12,7 +12,6 @@ from itsdangerous import URLSafeTimedSerializer
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-# Railway uses environment variables. Locally, these default to safe values.
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'augusta-national-2026-v3')
 
 # Database logic: Use PostgreSQL if on Railway, otherwise SQLite
@@ -42,7 +41,7 @@ rosters = db.Table('rosters',
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False)  # Use Email as Username
+    username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     entries = db.relationship('Entry', backref='owner', lazy=True)
@@ -313,9 +312,10 @@ def sync_espn():
         flash(f"Sync failed: {e}")
     return redirect(url_for('admin_panel'))
 
+# CRITICAL: Run initialization outside of the main block for Gunicorn/Railway
+with app.app_context():
+    db.create_all()
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
