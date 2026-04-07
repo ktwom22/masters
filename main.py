@@ -17,7 +17,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'augusta-national-2026-v
 
 # Database logic: Use PostgreSQL if on Railway, otherwise SQLite
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///masters_draft.db')
-if db_url.startswith("postgres://"):
+if db_url and db_url.startswith("postgres://"):
     # SQLAlchemy 1.4+ requires "postgresql://" instead of "postgres://"
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
