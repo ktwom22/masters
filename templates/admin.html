@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 800px; margin: auto;">
+    <h1>Tournament Control Center</h1>
+    <hr>
+
+    <div style="background: #e8f5e9; padding: 25px; border-radius: 12px; margin-bottom: 30px; border-left: 5px solid #00703c;">
+        <h3>1. Live Data Sync</h3>
+        <p>Pull the latest field (91+ players), world rankings, and tournament scores from ESPN.</p>
+        <form action="/admin/sync" method="POST">
+            <button type="submit" class="btn" style="background: #00703c;">Sync 2026 Masters Data</button>
+        </form>
+    </div>
+
+    <div style="background: #fff; border: 1px solid #ddd; padding: 25px; border-radius: 12px;">
+        <h3>2. Manual Scoring Overrides</h3>
+        <p>Manually set a score if the API is delayed.</p>
+        <form action="/admin/manual" method="POST">
+            <select name="golfer_id" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
+                {% for golfer in golfers %}
+                    <option value="{{ golfer.id }}">{{ golfer.name }} (Current: {{ golfer.current_total }})</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="score" placeholder="Score relative to par (e.g. -5)" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
+            <button type="submit" class="btn" style="width: 100%;">Apply Score</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

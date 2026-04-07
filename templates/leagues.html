@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-5">
+    <div class="col-12 text-center mb-4">
+        <h1 class="display-4">Tournament Clubhouse</h1>
+        <p class="text-muted">Manage your leagues or establish a new tournament.</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card h-100 p-4 masters-border">
+            <h3 class="h4 mb-3">Establish a League</h3>
+            <form action="{{ url_for('create_league') }}" method="POST">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Tournament Name</label>
+                    <input type="text" name="league_name" class="form-control form-control-lg" placeholder="e.g. Magnolia Lane Classic" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Field Size (Players)</label>
+                    <input type="number" name="max_size" class="form-control" value="10" min="2" max="20">
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Create Tournament</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-md-2 d-flex align-items-center justify-content-center">
+        <span class="text-muted fw-light">OR</span>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card h-100 p-4 border-start border-warning border-4">
+            <h3 class="h4 mb-3">Enter an Event</h3>
+            <form action="{{ url_for('join_league') }}" method="POST">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Invite Code</label>
+                    <input type="text" name="invite_code" class="form-control form-control-lg" placeholder="6-DIGIT CODE" required style="text-transform: uppercase;">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Patron Team Name</label>
+                    <input type="text" name="team_name" class="form-control" placeholder="e.g. Amen Corner Aces" required>
+                </div>
+                <button type="submit" class="btn btn-outline-dark w-100 py-2">Join Field</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="mt-5">
+    <h2 class="h3 mb-4">Your Active Tournaments</h2>
+    <div class="row g-3">
+        {% for entry in entries %}
+        <div class="col-12">
+            <div class="card p-3 shadow-sm hover-up">
+                <div class="d-flex justify-content-between align-items-center flex-wrap">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px; background-color: var(--masters-green) !important;">
+                            <span class="fw-bold">{{ entry.league.name[0] }}</span>
+                        </div>
+                        <div>
+                            <h5 class="mb-0">{{ entry.league.name }}</h5>
+                            <span class="text-muted small">Invite Code: <strong class="text-dark">{{ entry.league.invite_code }}</strong></span>
+                        </div>
+                    </div>
+
+                    <div class="mt-2 mt-md-0">
+                        {% if entry.league.status == 'recruiting' %}
+                            {% if entry.league.creator_id == current_user.id %}
+                                <form action="{{ url_for('start_draft', league_id=entry.league.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-warning btn-sm px-4">Randomize & Start</button>
+                                </form>
+                            {% else %}
+                                <span class="badge rounded-pill bg-light text-dark border px-3 py-2">Waiting for Commish...</span>
+                            {% endif %}
+                        {% else %}
+                            <a href="{{ url_for('draft_page', league_id=entry.league.id) }}" class="btn btn-success btn-sm px-3">Draft Room</a>
+                            <a href="{{ url_for('leaderboard', league_id=entry.league.id) }}" class="btn btn-outline-dark btn-sm px-3 ms-1">Leaderboard</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="card p-5 text-center bg-light border-dashed">
+                <p class="text-muted mb-0">No active tournaments found. Start one above!</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

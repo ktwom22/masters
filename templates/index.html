@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-5 mb-4 bg-light rounded-3 text-center border mt-5">
+    <div class="container-fluid py-5">
+        <h1 class="display-5 fw-bold">⛳ Masters 2026 Draft Hub</h1>
+        <p class="col-md-12 fs-4">Create or join a league to start your championship journey at Augusta.</p>
+        
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
+            <a href="{{ url_for('signup') }}" class="btn btn-success btn-lg px-4 gap-3">Register Now</a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Login</a>
+        </div>
+    </div>
+</div>
+
+<div class="row text-center mt-5">
+    <div class="col-md-4">
+        <h3>Step 1</h3>
+        <p>Create a league and invite your friends with a unique code.</p>
+    </div>
+    <div class="col-md-4">
+        <h3>Step 2</h3>
+        <p>Participate in a live Snake Draft to build your roster.</p>
+    </div>
+    <div class="col-md-4">
+        <h3>Step 3</h3>
+        <p>Watch live scores sync from Augusta and climb the leaderboard.</p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>{{ league.name }} Leaderboard</h2>
+    <table class="table table-striped mt-4 shadow-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>Rank</th>
+                <th>Team</th>
+                <th>Golfers</th>
+                <th>Total Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in entries %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ entry.team_name }}</strong></td>
+                <td>
+                    {% for g in entry.golfers %}
+                        <span class="badge bg-light text-dark border">{{ g.name }} ({{ g.current_total }})</span>
+                    {% endfor %}
+                </td>
+                <td class="fw-bold fs-5">{{ entry.combined_score if entry.combined_score != 0 else 'E' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

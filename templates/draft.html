@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Draft Room - Round {{ round }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card bg-dark text-white p-4 shadow">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1 class="mb-0">{{ league.name }} - Round {{ round }}</h1>
+                    <p class="lead text-info mb-0">Live Snake Draft in Progress</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <h3 class="mb-1">Currently Picking:</h3>
+                    <span class="badge bg-warning text-dark fs-4 px-4">{{ team.team_name }}</span>
+                    <p class="small mt-1 text-light">Manager: {{ team.owner.username }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-9">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Available Field</h4>
+            <span class="text-muted small">Sorted by World Rank</span>
+        </div>
+
+        <div class="row row-cols-1 row-cols-md-3 g-3">
+            {% for golfer in golfers %}
+            <div class="col">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="position-relative">
+                        <img src="{{ golfer.headshot_url }}" class="card-img-top p-2" alt="{{ golfer.name }}"
+                             style="background-color: #f8f9fa; height: 160px; object-fit: contain;"
+                             onerror="this.src='https://via.placeholder.com/160x160?text=No+Photo'">
+                        <span class="position-absolute top-0 end-0 badge bg-dark m-2">WR #{{ golfer.world_rank }}</span>
+                    </div>
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-1">{{ golfer.name }}</h5>
+                        <p class="small text-muted mb-3">Score: {{ golfer.current_total if golfer.current_total != 0 else 'E' }}</p>
+
+                        <form action="{{ url_for('draft_page', league_id=league.id) }}" method="POST">
+                            <input type="hidden" name="golfer_id" value="{{ golfer.id }}">
+
+                            {% if current_user.id == team.user_id %}
+                                <button type="submit" class="btn btn-success w-100 shadow-sm">Draft Player</button>
+                            {% else %}
+                                <button type="button" class="btn btn-outline-secondary w-100 disabled" disabled>
+                                    Wait for Turn
+                                </button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-12 text-center py-5">
+                <p class="text-muted">No more golfers available to draft.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="col-lg-3">
+        <div class="card shadow-sm border-0 sticky-top" style="top: 20px;">
+            <div class="card-header bg-white fw-bold border-bottom-0 pt-3">Draft Status</div>
+            <div class="card-body">
+                <div class="p-3 bg-light rounded mb-3">
+                    <p class="small mb-1"><strong>Format:</strong> Snake Draft</p>
+                    <p class="small mb-0 text-muted">The picking order reverses every round to keep things fair.</p>
+                </div>
+
+                <hr>
+
+                <h6>Quick Links:</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <a href="{{ url_for('leaderboard', league_id=league.id) }}" class="btn btn-sm btn-outline-primary w-100">
+                            View League Standings
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-sm btn-link text-muted w-100">
+                            Back to My Leagues
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+    <h1>Join the Draft</h1>
+    <form method="POST">
+        <input type="text" name="username" placeholder="Username" required>
+        <input type="text" name="team_name" placeholder="Team Name" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <button type="submit" class="btn">Register Team</button>
+    </form>
+{% endblock %}
