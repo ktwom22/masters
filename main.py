@@ -49,7 +49,7 @@ class League(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     invite_code = db.Column(db.String(10), unique=True, nullable=False)
-    max_size = db.Column(db.Integer, default=10)
+    max_size = db.Column(db.Integer, default=10) # Number of people in the league
     status = db.Column(db.String(20), default='recruiting')
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     entries = db.relationship('Entry', backref='league', lazy=True)
@@ -92,7 +92,13 @@ def load_user(user_id):
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for('leagues_dashboard'))
+        # Show leaderboard for the user's first league directly on the home page
+        first_entry = Entry.query.filter_by(user_id=current_user.id).first()
+        if first_entry:
+            league = first_entry.league
+            sorted_entries = sorted(league.entries, key=lambda x: x.combined_score)
+            return render_template('index.html', league=league, entries=sorted_entries)
+        return render_template('index.html', entries=[])
     return render_template('index.html')
 
 
@@ -184,7 +190,7 @@ def leagues_dashboard():
 @login_required
 def create_league():
     name = request.form.get('league_name')
-    # Use user input for number of players/teams in the league
+    # Use user input for max_size (how many people/teams are in the league)
     size = int(request.form.get('max_size', 10))
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
@@ -243,7 +249,7 @@ def draft_page(league_id):
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
-    # UPDATED: Now requires exactly 7 golfers per team to complete draft
+    # Requires exactly 7 golfers per team to complete draft
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
@@ -315,24 +321,20 @@ def sync_espn():
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
 
-            # --- THE ULTIMATE 999 RANK FIX ---
+            # --- RANKING LOGIC ---
             world_rank_val = 999
-
-            # Deep search in rankings array
             if 'rankings' in athlete:
                 for r in athlete['rankings']:
                     if r.get('name') == 'world' or r.get('type') == 'world':
                         world_rank_val = r.get('rank', 999)
                         break
 
-            # Secondary fallback in statistics
             if world_rank_val == 999:
                 stats = p.get('statistics', [])
                 for s in stats:
                     if s.get('name') == 'worldRank':
                         world_rank_val = s.get('value', 999)
 
-            # Tertiary fallback for tournament position if OWGR is missing
             if world_rank_val == 999:
                 pos = p.get('rank') or p.get('curRank')
                 if pos:
@@ -342,15 +344,10 @@ def sync_espn():
                         pass
 
             g.world_rank = world_rank_val
-
-            # --- HEADSHOT & SCORE ---
             g.headshot_url = athlete.get('headshot', {}).get('href')
 
             score_data = p.get('score', '0')
-            if isinstance(score_data, dict):
-                score_str = str(score_data.get('value', '0'))
-            else:
-                score_str = str(score_data)
+            score_str = str(score_data.get('value', '0')) if isinstance(score_data, dict) else str(score_data)
 
             if score_str.upper() == 'E' or score_str == 'None':
                 g.api_score = 0
@@ -361,7 +358,7 @@ def sync_espn():
                     g.api_score = 0
 
         db.session.commit()
-        flash("Masters data synced! Rankings are now accurate.")
+        flash("Masters data synced successfully.")
     except Exception as e:
         db.session.rollback()
         flash(f"Sync failed: {e}")
@@ -372,9 +369,8 @@ def sync_espn():
 with app.app_context():
     try:
         db.create_all()
-        print("Database initialized.")
     except Exception as e:
-        print(f"Initial DB connection failed: {e}")
+        print(f"DB Init failed: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
