@@ -12,13 +12,10 @@ from itsdangerous import URLSafeTimedSerializer
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-# Railway uses environment variables. Locally, these default to safe values.
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'augusta-national-2026-v3')
 
-# Database logic: Use PostgreSQL if on Railway, otherwise SQLite
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///masters_draft.db')
 if db_url and db_url.startswith("postgres://"):
-    # SQLAlchemy 1.4+ requires "postgresql://" instead of "postgres://"
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
@@ -42,7 +39,7 @@ rosters = db.Table('rosters',
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False)  # Use Email as Username
+    username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     entries = db.relationship('Entry', backref='owner', lazy=True)
@@ -187,13 +184,14 @@ def leagues_dashboard():
 @login_required
 def create_league():
     name = request.form.get('league_name')
+    # Use user input for number of players/teams in the league
     size = int(request.form.get('max_size', 10))
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
     new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
     db.session.add(new_league)
     db.session.flush()
 
-    # THE FIX: Split the email to get the username only
     display_name = current_user.username.split('@')[0]
 
     new_entry = Entry(
@@ -245,7 +243,8 @@ def draft_page(league_id):
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
-    if total_picks >= (num_teams * 6):
+    # UPDATED: Now requires exactly 7 golfers per team to complete draft
+    if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
         return redirect(url_for('leaderboard', league_id=league_id))
@@ -274,7 +273,6 @@ def draft_page(league_id):
 @login_required
 def leaderboard(league_id):
     league = db.session.get(League, league_id)
-    # Sorting by total score (lowest is best in golf)
     sorted_entries = sorted(league.entries, key=lambda x: x.combined_score)
     return render_template('leaderboard.html', league=league, entries=sorted_entries)
 
@@ -302,7 +300,6 @@ def admin_panel():
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
-    # 2026 Masters Tournament ID
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
 
     try:
@@ -318,24 +315,29 @@ def sync_espn():
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
 
-            # --- THE 999 FIX: FINDING WORLD RANKING ---
-            # Major Tournaments store World Ranking inside 'athlete' -> 'rankings'
+            # --- THE ULTIMATE 999 RANK FIX ---
             world_rank_val = 999
 
-            # 1. Check the official Rankings array for OWGR
-            rankings_list = athlete.get('rankings', [])
-            if rankings_list:
-                # The first entry in this list is almost always the OWGR
-                world_rank_val = rankings_list[0].get('rank', 999)
+            # Deep search in rankings array
+            if 'rankings' in athlete:
+                for r in athlete['rankings']:
+                    if r.get('name') == 'world' or r.get('type') == 'world':
+                        world_rank_val = r.get('rank', 999)
+                        break
 
-            # 2. Fallback: If still 999, look for a "displayValue" rank
+            # Secondary fallback in statistics
             if world_rank_val == 999:
-                # Sometimes rank is a string like "1" or "T5"
-                raw_rank = p.get('rank') or p.get('curRank')
-                if raw_rank:
+                stats = p.get('statistics', [])
+                for s in stats:
+                    if s.get('name') == 'worldRank':
+                        world_rank_val = s.get('value', 999)
+
+            # Tertiary fallback for tournament position if OWGR is missing
+            if world_rank_val == 999:
+                pos = p.get('rank') or p.get('curRank')
+                if pos:
                     try:
-                        # Strip "T" and convert to integer
-                        world_rank_val = int(str(raw_rank).replace('T', '').strip())
+                        world_rank_val = int(str(pos).replace('T', '').strip())
                     except:
                         pass
 
@@ -344,7 +346,6 @@ def sync_espn():
             # --- HEADSHOT & SCORE ---
             g.headshot_url = athlete.get('headshot', {}).get('href')
 
-            # Handle the Score (E = 0)
             score_data = p.get('score', '0')
             if isinstance(score_data, dict):
                 score_str = str(score_data.get('value', '0'))
@@ -368,13 +369,12 @@ def sync_espn():
 
 
 # --- CRITICAL RAILWAY INIT ---
-# This block ensures tables are created even if running via Gunicorn
 with app.app_context():
     try:
         db.create_all()
         print("Database initialized.")
     except Exception as e:
-        print(f"Initial DB connection failed (check your DATABASE_URL): {e}")
+        print(f"Initial DB connection failed: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
