@@ -379,27 +379,45 @@ def admin_panel():
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
+    # 1. Get Tournament Leaderboard
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
     try:
         data = requests.get(url).json()
         competitors = data['events'][0]['competitions'][0]['competitors']
+
         for p in competitors:
-            athlete = p['athlete']
+            athlete_data = p['athlete']
             espn_id = str(p['id'])
+
             g = Golfer.query.filter_by(espn_id=espn_id).first()
             if not g:
-                g = Golfer(name=athlete['displayName'], espn_id=espn_id)
+                g = Golfer(name=athlete_data['displayName'], espn_id=espn_id)
                 db.session.add(g)
-            g.world_rank = athlete.get('rankings', [{}])[0].get('rank', 999)
-            g.headshot_url = athlete.get('headshot', {}).get('href')
-            score_data = p.get('score', '0')
-            score_str = str(score_data.get('value', '0')) if isinstance(score_data, dict) else str(score_data)
-            g.api_score = int(score_str) if score_str.lstrip('-').isdigit() else 0
+
+            # Update live scores and headshots
+            g.headshot_url = athlete_data.get('headshot', {}).get('href')
+            score_val = p.get('score', {}).get('value', 0) if isinstance(p.get('score'), dict) else p.get('score', 0)
+            g.api_score = int(score_val)
+
+            # 2. FETCH WORLD RANK (The Missing Link)
+            # We hit the specific Athlete endpoint to get their OWGR
+            try:
+                profile_url = f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/athletes/{espn_id}"
+                profile = requests.get(profile_url).json()
+                # Look for the 'World Golf Rank' in the stats/rankings array
+                ranks = profile.get('athlete', {}).get('rankings', [])
+                if ranks:
+                    # Usually the first entry in rankings for golf is OWGR
+                    g.world_rank = ranks[0].get('rank', 999)
+            except:
+                pass  # If profile fetch fails, keep current rank
+
         db.session.commit()
-        flash("Synced!")
-    except:
+        flash("Full Sync Complete (Scores + World Ranks)!")
+    except Exception as e:
         db.session.rollback()
-    return redirect(url_for('admin_panel'))
+        flash(f"Sync Error: {str(e)}")
+    return redirect(url_for('index'))
 
 
 # --- PROGRAMMATIC SEO: PLAYER PAGES ---
