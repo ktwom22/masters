@@ -302,62 +302,61 @@ def admin_panel():
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
-
-    # 2026 Masters Event ID
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
 
     try:
-        response = requests.get(url)
-        data = response.json()
-
-        # Access the list of players
+        data = requests.get(url).json()
         competitors = data['events'][0]['competitions'][0]['competitors']
 
         for p in competitors:
             athlete = p['athlete']
             espn_id = str(p['id'])
 
-            # 1. Find or create the golfer in your database
             g = Golfer.query.filter_by(espn_id=espn_id).first()
             if not g:
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
 
-            # 2. Update Metadata (Headshots and World Rank)
+            # --- THE RANKING FIX ---
+            # Try three different places where ESPN hides the World Rank
+            espn_rank = p.get('rank') or athlete.get('rank') or p.get('curRank')
+
+            # If still not found, check if it's a string in 'displayValue'
+            if not espn_rank and 'status' in p:
+                # Sometimes rank is hidden in tournament status for non-starters
+                espn_rank = p['status'].get('displayValue')
+
+            # Clean the rank: ensure it is an integer and remove T (Tied) if present
+            try:
+                if isinstance(espn_rank, str):
+                    clean_rank = espn_rank.replace('T', '').strip()
+                    g.world_rank = int(clean_rank)
+                elif isinstance(espn_rank, int):
+                    g.world_rank = espn_rank
+                else:
+                    g.world_rank = 999  # Keep 999 if absolutely nothing is found
+            except:
+                g.world_rank = 999
+
+            # --- HEADSHOT & SCORE ---
             g.headshot_url = athlete.get('headshot', {}).get('href')
 
-            # ESPN usually includes the World Rank in the 'statistics' or 'ranks' field of the leaderboard
-            # We'll set a default if it's not found
-            g.world_rank = p.get('curRank', 999)
-
-            # 3. Parse the Score
-            # ESPN API scores can be strings like "E", "+2", "-5", or even None if they haven't started.
             raw_score = p.get('score', "0")
+            score_val = raw_score.get('value', 0) if isinstance(raw_score, dict) else raw_score
 
-            if isinstance(raw_score, dict):
-                score_val = raw_score.get('value', 0)
-            else:
-                score_val = raw_score
-
-            # Convert "E" or None to 0, otherwise convert to integer
-            if score_val == "E" or score_val is None or score_val == "":
+            if score_val == "E" or score_val is None:
                 g.api_score = 0
-            elif str(score_val).strip() == "CUT":
-                # Optional: Handle players who missed the cut (e.g., assign a high penalty score)
-                g.api_score = 80
             else:
                 try:
                     g.api_score = int(score_val)
-                except ValueError:
+                except:
                     g.api_score = 0
 
         db.session.commit()
-        flash("Tournament scores and player rankings synced!")
-
+        flash("Sync complete! Rankings and scores updated.")
     except Exception as e:
         db.session.rollback()
-        flash(f"Sync failed: {str(e)}")
-
+        flash(f"Sync failed: {e}")
     return redirect(url_for('admin_panel'))
 
 
