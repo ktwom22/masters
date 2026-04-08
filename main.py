@@ -49,7 +49,7 @@ class League(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     invite_code = db.Column(db.String(10), unique=True, nullable=False)
-    max_size = db.Column(db.Integer, default=10) # Number of people in the league
+    max_size = db.Column(db.Integer, default=10)
     status = db.Column(db.String(20), default='recruiting')
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     entries = db.relationship('Entry', backref='league', lazy=True)
@@ -91,7 +91,6 @@ def load_user(user_id):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    # Handle Create/Join actions if the user is logged in
     if current_user.is_authenticated and request.method == 'POST':
         action = request.form.get('action')
 
@@ -122,11 +121,11 @@ def index():
                 flash("League full or invalid code.")
             return redirect(url_for('index'))
 
-    # Data for the leaderboard/pro field
     pro_golfers = Golfer.query.order_by(Golfer.api_score.asc(), Golfer.world_rank.asc()).all()
     user_entries = current_user.entries if current_user.is_authenticated else []
 
     return render_template('index.html', pro_golfers=pro_golfers, user_entries=user_entries)
+
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -136,7 +135,7 @@ def signup():
         db.session.add(new_user)
         db.session.commit()
         login_user(new_user)
-        return redirect(url_for('leagues_dashboard'))
+        return redirect(url_for('index'))
     return render_template('signup.html')
 
 
@@ -146,7 +145,7 @@ def login():
         user = User.query.filter_by(username=request.form['username']).first()
         if user and check_password_hash(user.password, request.form['password']):
             login_user(user)
-            return redirect(url_for('leagues_dashboard'))
+            return redirect(url_for('index'))
         flash("Invalid credentials.")
     return render_template('login.html')
 
@@ -216,24 +215,16 @@ def leagues_dashboard():
 @login_required
 def create_league():
     name = request.form.get('league_name')
-    # Use user input for max_size (how many people/teams are in the league)
     size = int(request.form.get('max_size', 10))
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-
     new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
     db.session.add(new_league)
     db.session.flush()
-
     display_name = current_user.username.split('@')[0]
-
-    new_entry = Entry(
-        team_name=f"{display_name}'s Team",
-        user_id=current_user.id,
-        league_id=new_league.id
-    )
+    new_entry = Entry(team_name=f"{display_name}'s Team", user_id=current_user.id, league_id=new_league.id)
     db.session.add(new_entry)
     db.session.commit()
-    return redirect(url_for('leagues_dashboard'))
+    return redirect(url_for('index'))
 
 
 @app.route('/leagues/join', methods=['POST'])
@@ -243,11 +234,11 @@ def join_league():
     league = League.query.filter_by(invite_code=code).first()
     if not league or len(league.entries) >= league.max_size:
         flash("League full or invalid code.")
-        return redirect(url_for('leagues_dashboard'))
+        return redirect(url_for('index'))
     new_entry = Entry(team_name=request.form.get('team_name'), user_id=current_user.id, league_id=league.id)
     db.session.add(new_entry)
     db.session.commit()
-    return redirect(url_for('leagues_dashboard'))
+    return redirect(url_for('index'))
 
 
 @app.route('/leagues/<int:league_id>/start', methods=['POST'])
@@ -275,7 +266,6 @@ def draft_page(league_id):
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
-    # Requires exactly 7 golfers per team to complete draft
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
@@ -347,7 +337,6 @@ def sync_espn():
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
 
-            # --- RANKING LOGIC ---
             world_rank_val = 999
             if 'rankings' in athlete:
                 for r in athlete['rankings']:
