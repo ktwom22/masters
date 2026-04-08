@@ -6,3 +6,4 @@ gunicorn
 resend
 itsdangerous
 psycopg2-binary
+flask-mail

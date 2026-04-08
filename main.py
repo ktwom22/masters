@@ -2,12 +2,12 @@ import os
 import requests
 import random
 import string
-import resend
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer
+from flask_mail import Mail, Message
 
 app = Flask(__name__)
 
@@ -21,8 +21,17 @@ if db_url and db_url.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# --- FLASK-MAIL CONFIGURATION ---
+# Note: Use a Google App Password (16 characters) for MAIL_PASSWORD
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
+
 db = SQLAlchemy(app)
-resend.api_key = os.environ.get('RESEND_API_KEY')
+mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 login_manager = LoginManager()
@@ -178,15 +187,13 @@ def forgot_password():
             token = serializer.dumps(email, salt='pw-reset-token')
             link = url_for('reset_token', token=token, _external=True)
             try:
-                resend.Emails.send({
-                    "from": "Masters Draft <onboarding@resend.dev>",
-                    "to": [email],
-                    "subject": "⛳ Password Reset Request",
-                    "html": f"<p>Reset your password here: <a href='{link}'>Reset Link</a></p>"
-                })
+                msg = Message("⛳ Password Reset Request", recipients=[email])
+                msg.body = f"Reset your password here: {link}"
+                msg.html = f"<p>Reset your password here: <a href='{link}'>Reset Link</a></p>"
+                mail.send(msg)
                 flash("Recovery email sent.")
-            except:
-                flash("Email error.")
+            except Exception as e:
+                flash(f"Email error: {str(e)}")
         return redirect(url_for('login'))
     return render_template('forgot_password.html')
 
@@ -388,8 +395,6 @@ def sync_espn():
     return redirect(url_for('admin_panel'))
 
 
-# Add these routes to your existing main.py file
-
 # --- PROGRAMMATIC SEO: PLAYER PAGES ---
 
 @app.route('/golfer/<string:espn_id>')
@@ -419,21 +424,16 @@ def contact():
         name = request.form.get('name')
         user_email = request.form.get('email')
         subject = request.form.get('subject')
-        message = request.form.get('message')
+        message_body = request.form.get('message')
 
         try:
-            resend.Emails.send({
-                "from": "Masters Draft <onboarding@resend.dev>",
-                "to": ["ktwom22s@gmail.com"],  # REPLACE WITH YOUR GMAIL
-                "subject": f"Contact Form: {subject}",
-                "reply_to": user_email,
-                "html": f"""
-                    <h3>New Message from {name}</h3>
-                    <p><strong>Email:</strong> {user_email}</p>
-                    <p><strong>Message:</strong></p>
-                    <p>{message}</p>
-                """
-            })
+            msg = Message(
+                subject=f"Contact Form: {subject}",
+                recipients=['ktwom22s@gmail.com'], # Sent TO your gmail
+                reply_to=user_email,               # Reply goes TO the user
+                body=f"New message from {name} ({user_email}):\n\n{message_body}"
+            )
+            mail.send(msg)
             flash("Message sent successfully! We'll get back to you soon.")
         except Exception as e:
             flash(f"Error sending message: {str(e)}")
