@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+        <li class="breadcrumb-item active">{{ golfer.name }}</li>
+      </ol>
+    </nav>
+
+    <div class="card shadow-lg masters-border p-4">
+        <div class="row align-items-center">
+            <div class="col-md-3 text-center">
+                <img src="{{ golfer.headshot_url }}" class="img-fluid rounded-circle border border-success" style="width: 180px;" alt="{{ golfer.name }} headshot">
+            </div>
+            <div class="col-md-9">
+                <h1 class="display-4 fw-bold">{{ golfer.name }}</h1>
+                <p class="lead">World Rank: #{{ golfer.world_rank }}</p>
+                <div class="d-flex gap-3">
+                    <div class="p-3 bg-dark text-white rounded">
+                        <small class="d-block text-uppercase text-muted">Current Score</small>
+                        <h2 class="mb-0 {{ 'text-danger' if golfer.api_score > 0 else 'text-primary' if golfer.api_score < 0 else '' }}">
+                            {{ golfer.api_score if golfer.api_score != 0 else 'E' }}
+                        </h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-5">
+        <h3 class="fw-bold">Fantasy Ownership</h3>
+        <p class="text-muted">Users tracking {{ golfer.name }} in the Global Tournament:</p>
+        <div class="list-group">
+            {% for owner in owners %}
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ owner.team_name }}
+                    <span class="badge bg-success rounded-pill">Drafted</span>
+                </div>
+            {% else %}
+                <p class="fst-italic">No one has drafted this player yet. Be the first!</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

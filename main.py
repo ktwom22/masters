@@ -388,6 +388,54 @@ def sync_espn():
     return redirect(url_for('admin_panel'))
 
 
+# Add these routes to your existing main.py file
+
+# --- PROGRAMMATIC SEO: PLAYER PAGES ---
+
+@app.route('/golfer/<string:espn_id>')
+def golfer_detail(espn_id):
+    golfer = Golfer.query.filter_by(espn_id=espn_id).first_or_404()
+
+    # SEO logic: Create a dynamic title and description for this specific player
+    page_title = f"{golfer.name} - Masters 2026 Live Score & Draft Status"
+    page_desc = f"Track {golfer.name}'s live performance at Augusta National 2026. Current score: {golfer.api_score}. See which fantasy teams have drafted him."
+
+    # Find which entries in the Global League have this golfer
+    global_league = League.query.filter_by(is_global=True).first()
+    owners = []
+    if global_league:
+        owners = Entry.query.filter(Entry.league_id == global_league.id, Entry.golfers.contains(golfer)).all()
+
+    return render_template('golfer_detail.html',
+                           golfer=golfer,
+                           page_title=page_title,
+                           page_desc=page_desc,
+                           owners=owners)
+
+
+# --- TECHNICAL SEO: DYNAMIC SITEMAP ---
+
+@app.route('/sitemap.xml')
+def sitemap():
+    """Generate a real-time sitemap for search engines."""
+    pages = []
+
+    # Add static pages
+    pages.append({'loc': url_for('index', _external=True), 'lastmod': '2026-04-07'})
+
+    # Add all golfer pages
+    golfers = Golfer.query.all()
+    for g in golfers:
+        pages.append({
+            'loc': url_for('golfer_detail', espn_id=g.espn_id, _external=True),
+            'lastmod': '2026-04-07'
+        })
+
+    sitemap_xml = render_template('sitemap_template.xml', pages=pages)
+    response = make_response(sitemap_xml)
+    response.headers["Content-Type"] = "application/xml"
+    return response
+
 with app.app_context():
     try:
         db.create_all()
