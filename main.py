@@ -491,6 +491,18 @@ def sitemap():
     response.headers["Content-Type"] = "application/xml"
     return response
 
+
+@app.route('/robots.txt')
+def robots_txt():
+    # This tells Google they are allowed to crawl everything
+    # and points them specifically to your sitemap.
+    sitemap_url = url_for('sitemap', _external=True)
+    content = f"User-agent: *\nAllow: /\nSitemap: {sitemap_url}"
+
+    response = make_response(content)
+    response.headers["Content-Type"] = "text/plain"
+    return response
+
 with app.app_context():
     try:
         db.create_all()
