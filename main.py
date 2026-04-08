@@ -36,12 +36,14 @@ rosters = db.Table('rosters',
                    db.Column('golfer_id', db.Integer, db.ForeignKey('golfer.id'), primary_key=True)
                    )
 
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     entries = db.relationship('Entry', backref='owner', lazy=True)
+
 
 class League(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -52,6 +54,7 @@ class League(db.Model):
     is_global = db.Column(db.Boolean, default=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     entries = db.relationship('Entry', backref='league', lazy=True)
+
 
 class Golfer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -66,6 +69,7 @@ class Golfer(db.Model):
     def current_total(self):
         return self.manual_score if self.manual_score is not None else self.api_score
 
+
 class Entry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     team_name = db.Column(db.String(100), nullable=False)
@@ -78,9 +82,11 @@ class Entry(db.Model):
     def combined_score(self):
         return sum([g.current_total for g in self.golfers])
 
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
 
 # --- AUTH & NAVIGATION ---
 
@@ -119,6 +125,7 @@ def index():
     user_entries = current_user.entries if current_user.is_authenticated else []
     return render_template('index.html', pro_golfers=pro_golfers, user_entries=user_entries)
 
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
@@ -141,6 +148,7 @@ def signup():
         return redirect(url_for('index'))
     return render_template('signup.html')
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -151,10 +159,12 @@ def login():
         flash("Invalid credentials.")
     return render_template('login.html')
 
+
 @app.route('/logout')
 def logout():
     logout_user()
     return redirect(url_for('index'))
+
 
 # --- PASSWORD RECOVERY ---
 
@@ -174,9 +184,11 @@ def forgot_password():
                     "html": f"<p>Reset your password here: <a href='{link}'>Reset Link</a></p>"
                 })
                 flash("Recovery email sent.")
-            except: flash("Email error.")
+            except:
+                flash("Email error.")
         return redirect(url_for('login'))
     return render_template('forgot_password.html')
+
 
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_token(token):
@@ -194,13 +206,14 @@ def reset_token(token):
         return redirect(url_for('login'))
     return render_template('reset_with_token.html')
 
+
 # --- LEAGUE SYSTEM ---
 
 @app.route('/leagues')
 @login_required
 def leagues_dashboard():
-    # Resolves the BuildError for templates looking for 'leagues_dashboard'
     return redirect(url_for('index'))
+
 
 @app.route('/leagues/create', methods=['POST'])
 @login_required
@@ -211,10 +224,12 @@ def create_league():
     new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
     db.session.add(new_league)
     db.session.flush()
-    new_entry = Entry(team_name=f"{current_user.username.split('@')[0]}'s Team", user_id=current_user.id, league_id=new_league.id)
+    new_entry = Entry(team_name=f"{current_user.username.split('@')[0]}'s Team", user_id=current_user.id,
+                      league_id=new_league.id)
     db.session.add(new_entry)
     db.session.commit()
     return redirect(url_for('index'))
+
 
 # --- NUKE & PAVE (EMERGENCY) ---
 
@@ -231,6 +246,7 @@ def nuke_and_pave(secret):
     except Exception as e:
         return f"Nuke failed: {e}"
 
+
 # --- DRAFT & LEADERBOARD ---
 
 @app.route('/leagues/<int:league_id>/start', methods=['POST'])
@@ -246,34 +262,53 @@ def start_draft(league_id):
     db.session.commit()
     return redirect(url_for('draft_page', league_id=league.id))
 
+
 @app.route('/draft/<int:league_id>', methods=['GET', 'POST'])
 @login_required
 def draft_page(league_id):
     league = db.session.get(League, league_id)
     entries = Entry.query.filter_by(league_id=league_id).order_by(Entry.draft_order).all()
     num_teams = len(entries)
+
+    # Calculate how many total golfers have been picked in this league
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
+    # End draft if every team has 7 golfers
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
         return redirect(url_for('leaderboard', league_id=league_id))
 
+    # Snake Draft Logic
     curr_round = (total_picks // num_teams) + 1
     pick_idx = total_picks % num_teams
-    turn_entry = entries[pick_idx] if curr_round % 2 != 0 else entries[num_teams - 1 - pick_idx]
 
-    if request.method == 'POST' and current_user.id == turn_entry.user_id:
-        golfer = db.session.get(Golfer, request.form.get('golfer_id'))
-        already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
-        if golfer and not already_taken:
-            turn_entry.golfers.append(golfer)
-            db.session.commit()
-            return redirect(url_for('draft_page', league_id=league_id))
+    if curr_round % 2 != 0:
+        turn_entry = entries[pick_idx]
+    else:
+        turn_entry = entries[num_teams - 1 - pick_idx]
 
+    if request.method == 'POST':
+        if current_user.id != turn_entry.user_id:
+            flash("Wait your turn!")
+        else:
+            golfer_id = request.form.get('golfer_id')
+            golfer = db.session.get(Golfer, golfer_id)
+            already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
+
+            if golfer and not already_taken:
+                turn_entry.golfers.append(golfer)
+                db.session.commit()
+                return redirect(url_for('draft_page', league_id=league_id))
+            else:
+                flash("Golfer already taken or invalid.")
+
+    # Get available golfers
     taken_ids = [g.id for e in league.entries for g in e.golfers]
     available = Golfer.query.filter(~Golfer.id.in_(taken_ids)).order_by(Golfer.world_rank).all()
+
     return render_template('draft.html', league=league, team=turn_entry, golfers=available, round=curr_round)
+
 
 @app.route('/leaderboard/<int:league_id>')
 @login_required
@@ -281,6 +316,7 @@ def leaderboard(league_id):
     league = db.session.get(League, league_id)
     sorted_entries = sorted(league.entries, key=lambda x: x.combined_score)
     return render_template('leaderboard.html', league=league, entries=sorted_entries)
+
 
 # --- ADMIN GATE & SYNC ---
 
@@ -293,11 +329,13 @@ def admin_gate(secret):
         return redirect(url_for('admin_panel'))
     abort(403)
 
+
 @app.route('/admin')
 @login_required
 def admin_panel():
     if not current_user.is_admin: abort(403)
     return render_template('admin.html')
+
 
 @app.route('/admin/sync', methods=['POST'])
 @login_required
@@ -321,12 +359,16 @@ def sync_espn():
             g.api_score = int(score_str) if score_str.lstrip('-').isdigit() else 0
         db.session.commit()
         flash("Synced!")
-    except: db.session.rollback()
-    return redirect(url_for('admin_panel'))
+    except:
+        db.session.rollback()
+    return redirect(url_for('index'))
+
 
 with app.app_context():
-    try: db.create_all()
-    except Exception as e: print(f"DB Init failed: {e}")
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"DB Init failed: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
