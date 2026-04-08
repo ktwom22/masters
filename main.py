@@ -136,7 +136,6 @@ def signup():
 
         global_league = League.query.filter_by(is_global=True).first()
         if not global_league:
-            # Set global league to 'drafting' by default so users can immediately pick
             global_league = League(name="2026 Global Tournament", invite_code="MASTERS", max_size=5000, is_global=True,
                                    status='drafting')
             db.session.add(global_league)
@@ -233,19 +232,18 @@ def create_league():
     return redirect(url_for('index'))
 
 
-# --- NUKE & PAVE (EMERGENCY RESET) ---
+# --- NUKE & PAVE (TOTAL SYSTEM RESET) ---
 
 @app.route('/admin/nuke/<string:secret>')
 def nuke_and_pave(secret):
     if secret != 'masters2026':
         abort(403)
-
     try:
         logout_user()
         db.session.remove()
         db.drop_all()
         db.create_all()
-        flash("System Reset Successful: All users, leagues, and golfers have been wiped.")
+        flash("System Reset Successful.")
         return redirect(url_for('signup'))
     except Exception as e:
         db.session.rollback()
@@ -272,25 +270,49 @@ def start_draft(league_id):
 @login_required
 def draft_page(league_id):
     league = db.session.get(League, league_id)
+
+    # Identify the user's entry for THIS league
+    user_entry = Entry.query.filter_by(league_id=league_id, user_id=current_user.id).first()
+    if not user_entry:
+        abort(404)
+
+    # GLOBAL LEAGUE LOGIC (Pick-em style)
+    if league.is_global:
+        if request.method == 'POST':
+            golfer_id = request.form.get('golfer_id')
+            golfer = db.session.get(Golfer, golfer_id)
+
+            # Allow up to 7 golfers, and check if THIS specific user already has this golfer
+            if len(user_entry.golfers) >= 7:
+                flash("Your team is full (7 golfers max).")
+            elif golfer in user_entry.golfers:
+                flash("You already picked this golfer.")
+            elif golfer:
+                user_entry.golfers.append(golfer)
+                db.session.commit()
+                # Auto-complete global draft if they hit 7
+                if len(user_entry.golfers) == 7:
+                    flash("Global team complete!")
+                    return redirect(url_for('leaderboard', league_id=league.id))
+            return redirect(url_for('draft_page', league_id=league.id))
+
+        # In Global, ALL golfers are available as long as they aren't on THIS user's team
+        available = Golfer.query.order_by(Golfer.world_rank).all()
+        return render_template('draft.html', league=league, team=user_entry, golfers=available, round="Global Pick")
+
+    # PRIVATE LEAGUE LOGIC (Snake Draft style)
     entries = Entry.query.filter_by(league_id=league_id).order_by(Entry.draft_order).all()
     num_teams = len(entries)
-
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
-    # End draft if every team has 7 golfers
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
         return redirect(url_for('leaderboard', league_id=league_id))
 
-    # Snake Draft Logic
     curr_round = (total_picks // num_teams) + 1
     pick_idx = total_picks % num_teams
-
-    if curr_round % 2 != 0:
-        turn_entry = entries[pick_idx]
-    else:
-        turn_entry = entries[num_teams - 1 - pick_idx]
+    turn_entry = entries[pick_idx] if curr_round % 2 != 0 else entries[num_teams - 1 - pick_idx]
 
     if request.method == 'POST':
         if current_user.id != turn_entry.user_id:
@@ -298,8 +320,6 @@ def draft_page(league_id):
         else:
             golfer_id = request.form.get('golfer_id')
             golfer = db.session.get(Golfer, golfer_id)
-
-            # Use current league context for taken golfers
             already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
 
             if golfer and not already_taken:
@@ -311,7 +331,6 @@ def draft_page(league_id):
 
     taken_ids = [g.id for e in league.entries for g in e.golfers]
     available = Golfer.query.filter(~Golfer.id.in_(taken_ids)).order_by(Golfer.world_rank).all()
-
     return render_template('draft.html', league=league, team=turn_entry, golfers=available, round=curr_round)
 
 
