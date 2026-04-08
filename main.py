@@ -136,7 +136,9 @@ def signup():
 
         global_league = League.query.filter_by(is_global=True).first()
         if not global_league:
-            global_league = League(name="2026 Global Tournament", invite_code="MASTERS", max_size=5000, is_global=True)
+            # Set global league to 'drafting' by default so users can immediately pick
+            global_league = League(name="2026 Global Tournament", invite_code="MASTERS", max_size=5000, is_global=True,
+                                   status='drafting')
             db.session.add(global_league)
             db.session.flush()
 
@@ -231,32 +233,20 @@ def create_league():
     return redirect(url_for('index'))
 
 
-# --- NUKE & PAVE (EMERGENCY) ---
-
-# --- NUKE & PAVE (TOTAL SYSTEM RESET) ---
+# --- NUKE & PAVE (EMERGENCY RESET) ---
 
 @app.route('/admin/nuke/<string:secret>')
 def nuke_and_pave(secret):
-    # Security Check
     if secret != 'masters2026':
         abort(403)
 
     try:
-        # 1. Clear any active login sessions
         logout_user()
-
-        # 2. Close all existing database connections
         db.session.remove()
-
-        # 3. Drop all tables (Users, Leagues, Entries, Golfers, Rosters)
         db.drop_all()
-
-        # 4. Recreate the schema from scratch
         db.create_all()
-
         flash("System Reset Successful: All users, leagues, and golfers have been wiped.")
         return redirect(url_for('signup'))
-
     except Exception as e:
         db.session.rollback()
         return f"Reset failed: {str(e)}"
@@ -285,7 +275,6 @@ def draft_page(league_id):
     entries = Entry.query.filter_by(league_id=league_id).order_by(Entry.draft_order).all()
     num_teams = len(entries)
 
-    # Calculate how many total golfers have been picked in this league
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
     # End draft if every team has 7 golfers
@@ -309,6 +298,8 @@ def draft_page(league_id):
         else:
             golfer_id = request.form.get('golfer_id')
             golfer = db.session.get(Golfer, golfer_id)
+
+            # Use current league context for taken golfers
             already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
 
             if golfer and not already_taken:
@@ -318,7 +309,6 @@ def draft_page(league_id):
             else:
                 flash("Golfer already taken or invalid.")
 
-    # Get available golfers
     taken_ids = [g.id for e in league.entries for g in e.golfers]
     available = Golfer.query.filter(~Golfer.id.in_(taken_ids)).order_by(Golfer.world_rank).all()
 
@@ -376,7 +366,7 @@ def sync_espn():
         flash("Synced!")
     except:
         db.session.rollback()
-    return redirect(url_for('index'))
+    return redirect(url_for('admin_panel'))
 
 
 with app.app_context():
