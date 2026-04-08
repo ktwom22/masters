@@ -51,6 +51,7 @@ class League(db.Model):
     invite_code = db.Column(db.String(10), unique=True, nullable=False)
     max_size = db.Column(db.Integer, default=10)
     status = db.Column(db.String(20), default='recruiting')
+    is_global = db.Column(db.Boolean, default=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     entries = db.relationship('Entry', backref='league', lazy=True)
 
@@ -96,6 +97,7 @@ def index():
 
         if action == 'create':
             name = request.form.get('league_name')
+            # CAPTURING LEAGUE SIZE
             size = int(request.form.get('max_size', 10))
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -132,6 +134,19 @@ def signup():
         hashed_pw = generate_password_hash(request.form['password'], method='pbkdf2:sha256')
         new_user = User(username=request.form['username'], password=hashed_pw)
         db.session.add(new_user)
+        db.session.flush()
+
+        # AUTO-JOIN GLOBAL LEAGUE LOGIC
+        global_league = League.query.filter_by(is_global=True).first()
+        if not global_league:
+            global_league = League(name="2026 Global Tournament", invite_code="MASTERS", max_size=5000, is_global=True)
+            db.session.add(global_league)
+            db.session.flush()
+
+        global_entry = Entry(team_name=f"{new_user.username.split('@')[0]}'s Global Team",
+                             user_id=new_user.id, league_id=global_league.id)
+        db.session.add(global_entry)
+
         db.session.commit()
         login_user(new_user)
         return redirect(url_for('index'))
@@ -173,16 +188,14 @@ def forgot_password():
                     "html": f"""
                     <div style="font-family: sans-serif; padding: 20px; border-top: 5px solid #006747;">
                         <h2>Clubhouse Recovery</h2>
-                        <p>You requested a password reset for your Masters 2026 account.</p>
                         <p>Click the button below to set a new password:</p>
                         <a href="{link}" style="background-color: #006747; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-                        <p style="margin-top: 20px; font-size: 12px; color: #666;">This link will expire in 30 minutes.</p>
                     </div>
                     """
                 })
                 flash("Check your inbox for a recovery link.")
             except Exception as e:
-                flash("Error sending email. Please try again later.")
+                flash("Error sending email.")
         else:
             flash("If an account exists, a link has been sent.")
         return redirect(url_for('login'))
@@ -211,7 +224,6 @@ def reset_token(token):
 @app.route('/leagues')
 @login_required
 def leagues_dashboard():
-    # Fix for base.html BuildError: Redirect old dashboard links to the new index dashboard
     return redirect(url_for('index'))
 
 
@@ -219,6 +231,7 @@ def leagues_dashboard():
 @login_required
 def create_league():
     name = request.form.get('league_name')
+    # CAPTURING LEAGUE SIZE HERE TOO
     size = int(request.form.get('max_size', 10))
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -337,16 +350,18 @@ def sync_espn():
             if not g:
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
+
+            # IMPROVED RANKING LOGIC
             world_rank_val = 999
-            if 'rankings' in athlete:
-                for r in athlete['rankings']:
-                    if r.get('name') == 'world' or r.get('type') == 'world':
-                        world_rank_val = r.get('rank', 999)
-                        break
+            if 'rankings' in athlete and athlete['rankings']:
+                world_rank_val = athlete['rankings'][0].get('rank', 999)
+
             g.world_rank = world_rank_val
             g.headshot_url = athlete.get('headshot', {}).get('href')
+
             score_data = p.get('score', '0')
             score_str = str(score_data.get('value', '0')) if isinstance(score_data, dict) else str(score_data)
+
             if score_str.upper() == 'E' or score_str == 'None':
                 g.api_score = 0
             else:
