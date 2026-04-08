@@ -192,7 +192,15 @@ def create_league():
     new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
     db.session.add(new_league)
     db.session.flush()
-    new_entry = Entry(team_name=f"{current_user.username}'s Team", user_id=current_user.id, league_id=new_league.id)
+
+    # THE FIX: Split the email to get the username only
+    display_name = current_user.username.split('@')[0]
+
+    new_entry = Entry(
+        team_name=f"{display_name}'s Team",
+        user_id=current_user.id,
+        league_id=new_league.id
+    )
     db.session.add(new_entry)
     db.session.commit()
     return redirect(url_for('leagues_dashboard'))

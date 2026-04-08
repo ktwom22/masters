@@ -3,66 +3,81 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>⛳ {{ league.name }} Leaderboard</h2>
-        <span class="badge bg-dark">Status: {{ league.status.capitalize() }}</span>
+        <div class="text-end">
+            <span class="badge bg-dark">Status: {{ league.status.capitalize() }}</span>
+            <div class="text-muted small">Updated: 2026 Masters</div>
+        </div>
     </div>
 
     <div class="list-group shadow-sm">
         <div class="list-group-item bg-dark text-white d-none d-md-block">
-            <div class="row text-center">
+            <div class="row text-center fw-bold">
                 <div class="col-1">Rank</div>
-                <div class="col-7 text-start">Team Name</div>
+                <div class="col-7 text-start">Team & Manager</div>
                 <div class="col-4">Total Score</div>
             </div>
         </div>
 
         {% for entry in entries %}
-        <div class="list-group-item list-group-item-action border-success mb-2 p-0 overflow-hidden">
+        <div class="list-group-item list-group-item-action border-success mb-2 p-0 overflow-hidden shadow-sm">
             <div class="p-3 d-flex justify-content-between align-items-center"
                  data-bs-toggle="collapse"
                  data-bs-target="#team-details-{{ entry.id }}"
                  style="cursor: pointer; background-color: #f8f9fa;">
 
                 <div class="d-flex align-items-center">
-                    <span class="badge rounded-pill bg-success me-3 fs-6">{{ loop.index }}</span>
+                    <span class="badge rounded-pill bg-success me-3 fs-5">{{ loop.index }}</span>
                     <div>
-                        <h5 class="mb-0 text-dark">{{ entry.team_name }}</h5>
-                        <small class="text-muted">Manager: <strong>{{ entry.owner.username }}</strong></small>
+                        <h5 class="mb-0 text-dark">
+                            {{ entry.team_name.split('@')[0] if '@' in entry.team_name else entry.team_name }}
+                        </h5>
+                        <small class="text-muted">Manager: <span class="fw-bold text-success">{{ entry.owner.username.split('@')[0] }}</span></small>
                     </div>
                 </div>
 
-                <div class="text-end">
-                    <span class="fw-bold fs-4 {{ 'text-danger' if entry.combined_score > 0 else 'text-primary' if entry.combined_score < 0 else 'text-dark' }}">
-                        {{ entry.combined_score if entry.combined_score != 0 else 'E' }}
-                    </span>
-                    <i class="bi bi-chevron-down ms-2 text-muted"></i>
+                <div class="text-end d-flex align-items-center">
+                    <div class="me-3">
+                        <span class="fw-bold fs-3 {{ 'text-danger' if entry.combined_score > 0 else 'text-primary' if entry.combined_score < 0 else 'text-dark' }}">
+                            {{ entry.combined_score if entry.combined_score != 0 else 'E' }}
+                        </span>
+                    </div>
+                    <i class="bi bi-chevron-down text-muted"></i>
                 </div>
             </div>
 
             <div id="team-details-{{ entry.id }}" class="collapse">
                 <div class="p-3 bg-white border-top">
-                    <h6 class="text-uppercase text-muted small fw-bold mb-3">Roster & Player Performance</h6>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-uppercase text-muted small fw-bold mb-0">Active Roster</h6>
+                        <span class="text-muted small">{{ entry.golfers|length }} / 6 Players Picked</span>
+                    </div>
+
                     <div class="row g-3">
                         {% for g in entry.golfers %}
                         <div class="col-12 col-sm-6 col-md-4">
-                            <div class="card h-100 border-0 bg-light">
+                            <div class="card h-100 border-0 bg-light shadow-sm">
                                 <div class="card-body d-flex align-items-center p-2">
                                     <div class="position-relative">
                                         <img src="{{ g.headshot_url or 'https://a.espncdn.com/combiner/i?img=/i/headshots/golf/players/full/default.png' }}"
                                              alt="{{ g.name }}"
-                                             class="rounded-circle border"
-                                             style="width: 55px; height: 55px; object-fit: cover; background: #fff;">
+                                             class="rounded-circle border border-2 border-white"
+                                             style="width: 60px; height: 60px; object-fit: cover; background: #fff;">
                                     </div>
                                     <div class="ms-3 flex-grow-1">
-                                        <div class="fw-bold text-truncate" style="max-width: 120px;">{{ g.name }}</div>
+                                        <div class="fw-bold text-dark text-truncate" style="max-width: 130px;">{{ g.name }}</div>
                                         <div class="d-flex align-items-center mt-1">
                                             <span class="badge {{ 'bg-danger' if g.current_total > 0 else 'bg-primary' if g.current_total < 0 else 'bg-secondary' }} me-2">
                                                 {{ g.current_total if g.current_total != 0 else 'E' }}
                                             </span>
-                                            <small class="text-muted">OWGR: #{{ g.world_rank }}</small>
+                                            <small class="text-muted" style="font-size: 0.75rem;">Rank: #{{ g.world_rank }}</small>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                        {% else %}
+                        <div class="col-12 text-center py-3">
+                            <p class="text-muted italic small">No golfers drafted yet.</p>
                         </div>
                         {% endfor %}
                     </div>
@@ -73,16 +88,41 @@
     </div>
 
     {% if not entries %}
-    <div class="text-center py-5">
-        <p class="text-muted fs-5">No teams have joined this league yet.</p>
-        <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-success">Back to Dashboard</a>
+    <div class="card border-0 bg-light text-center py-5 mt-4">
+        <div class="card-body">
+            <i class="bi bi-people fs-1 text-muted"></i>
+            <p class="text-muted fs-5 mt-3">The clubhouse is empty. Invite some players!</p>
+            <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-success mt-2">Back to Dashboard</a>
+        </div>
     </div>
     {% endif %}
+
+    <div class="mt-4 text-center">
+        <small class="text-muted">Lowest combined score wins the Green Jacket.</small>
+    </div>
 </div>
 
 <style>
-    .collapse { transition: all 0.35s ease; }
-    .list-group-item:hover { border-left: 5px solid #198754 !important; transition: border 0.1s; }
-    .card:hover { transform: translateY(-2px); transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    /* Smooth transitions for the dropdown */
+    .collapse { transition: all 0.3s ease-out; }
+
+    /* Highlight the team row on hover */
+    .list-group-item-action:hover {
+        border-left: 6px solid #198754 !important;
+        background-color: #f1f3f5 !important;
+    }
+
+    /* Small animation for the player cards */
+    .card:hover {
+        transform: scale(1.02);
+        transition: transform 0.2s ease-in-out;
+        z-index: 10;
+    }
+
+    /* Chevron rotation when open */
+    [aria-expanded="true"] .bi-chevron-down {
+        transform: rotate(180deg);
+        transition: transform 0.3s;
+    }
 </style>
 {% endblock %}
