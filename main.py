@@ -96,6 +96,7 @@ def index():
 
         if action == 'create':
             name = request.form.get('league_name')
+            # Fixed: Properly captures max_size from the form on index
             size = int(request.form.get('max_size', 10))
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -105,7 +106,7 @@ def index():
                               user_id=current_user.id, league_id=new_league.id)
             db.session.add(new_entry)
             db.session.commit()
-            flash(f"League '{name}' created!")
+            flash(f"League '{name}' created for {size} players!")
             return redirect(url_for('index'))
 
         elif action == 'join':
@@ -266,6 +267,7 @@ def draft_page(league_id):
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
+    # Tournament pick rule (7 golfers)
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
