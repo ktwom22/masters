@@ -233,18 +233,33 @@ def create_league():
 
 # --- NUKE & PAVE (EMERGENCY) ---
 
+# --- NUKE & PAVE (TOTAL SYSTEM RESET) ---
+
 @app.route('/admin/nuke/<string:secret>')
 def nuke_and_pave(secret):
+    # Security Check
     if secret != 'masters2026':
         abort(403)
+
     try:
-        db.drop_all()
-        db.create_all()
+        # 1. Clear any active login sessions
         logout_user()
-        flash("Database reset. Schema is now up to date.")
+
+        # 2. Close all existing database connections
+        db.session.remove()
+
+        # 3. Drop all tables (Users, Leagues, Entries, Golfers, Rosters)
+        db.drop_all()
+
+        # 4. Recreate the schema from scratch
+        db.create_all()
+
+        flash("System Reset Successful: All users, leagues, and golfers have been wiped.")
         return redirect(url_for('signup'))
+
     except Exception as e:
-        return f"Nuke failed: {e}"
+        db.session.rollback()
+        return f"Reset failed: {str(e)}"
 
 
 # --- DRAFT & LEADERBOARD ---
