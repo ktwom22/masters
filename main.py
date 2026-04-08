@@ -302,25 +302,62 @@ def admin_panel():
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
-    # Corrected event ID for 2026 Masters based on current API endpoints
+
+    # 2026 Masters Event ID
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
+
     try:
-        data = requests.get(url).json()
+        response = requests.get(url)
+        data = response.json()
+
+        # Access the list of players
         competitors = data['events'][0]['competitions'][0]['competitors']
+
         for p in competitors:
             athlete = p['athlete']
-            g = Golfer.query.filter_by(espn_id=p['id']).first()
+            espn_id = str(p['id'])
+
+            # 1. Find or create the golfer in your database
+            g = Golfer.query.filter_by(espn_id=espn_id).first()
             if not g:
-                g = Golfer(name=athlete['displayName'], espn_id=p['id'])
+                g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
+
+            # 2. Update Metadata (Headshots and World Rank)
             g.headshot_url = athlete.get('headshot', {}).get('href')
-            raw_score = p.get('score', 0)
-            score_val = raw_score.get('value', 0) if isinstance(raw_score, dict) else raw_score
-            g.api_score = 0 if score_val == "E" or score_val is None else int(score_val)
+
+            # ESPN usually includes the World Rank in the 'statistics' or 'ranks' field of the leaderboard
+            # We'll set a default if it's not found
+            g.world_rank = p.get('curRank', 999)
+
+            # 3. Parse the Score
+            # ESPN API scores can be strings like "E", "+2", "-5", or even None if they haven't started.
+            raw_score = p.get('score', "0")
+
+            if isinstance(raw_score, dict):
+                score_val = raw_score.get('value', 0)
+            else:
+                score_val = raw_score
+
+            # Convert "E" or None to 0, otherwise convert to integer
+            if score_val == "E" or score_val is None or score_val == "":
+                g.api_score = 0
+            elif str(score_val).strip() == "CUT":
+                # Optional: Handle players who missed the cut (e.g., assign a high penalty score)
+                g.api_score = 80
+            else:
+                try:
+                    g.api_score = int(score_val)
+                except ValueError:
+                    g.api_score = 0
+
         db.session.commit()
-        flash("Scores Synced.")
+        flash("Tournament scores and player rankings synced!")
+
     except Exception as e:
-        flash(f"Sync failed: {e}")
+        db.session.rollback()
+        flash(f"Sync failed: {str(e)}")
+
     return redirect(url_for('admin_panel'))
 
 
