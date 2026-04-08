@@ -1,30 +1,88 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container mt-4">
-    <h2>{{ league.name }} Leaderboard</h2>
-    <table class="table table-striped mt-4 shadow-sm">
-        <thead class="table-dark">
-            <tr>
-                <th>Rank</th>
-                <th>Team</th>
-                <th>Golfers</th>
-                <th>Total Score</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for entry in entries %}
-            <tr>
-                <td>{{ loop.index }}</td>
-                <td><strong>{{ entry.team_name }}</strong></td>
-                <td>
-                    {% for g in entry.golfers %}
-                        <span class="badge bg-light text-dark border">{{ g.name }} ({{ g.current_total }})</span>
-                    {% endfor %}
-                </td>
-                <td class="fw-bold fs-5">{{ entry.combined_score if entry.combined_score != 0 else 'E' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>⛳ {{ league.name }} Leaderboard</h2>
+        <span class="badge bg-dark">Status: {{ league.status.capitalize() }}</span>
+    </div>
+
+    <div class="list-group shadow-sm">
+        <div class="list-group-item bg-dark text-white d-none d-md-block">
+            <div class="row text-center">
+                <div class="col-1">Rank</div>
+                <div class="col-7 text-start">Team Name</div>
+                <div class="col-4">Total Score</div>
+            </div>
+        </div>
+
+        {% for entry in entries %}
+        <div class="list-group-item list-group-item-action border-success mb-2 p-0 overflow-hidden">
+            <div class="p-3 d-flex justify-content-between align-items-center"
+                 data-bs-toggle="collapse"
+                 data-bs-target="#team-details-{{ entry.id }}"
+                 style="cursor: pointer; background-color: #f8f9fa;">
+
+                <div class="d-flex align-items-center">
+                    <span class="badge rounded-pill bg-success me-3 fs-6">{{ loop.index }}</span>
+                    <div>
+                        <h5 class="mb-0 text-dark">{{ entry.team_name }}</h5>
+                        <small class="text-muted">Owner: {{ entry.owner.username }}</small>
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <span class="fw-bold fs-4 {{ 'text-danger' if entry.combined_score > 0 else 'text-primary' if entry.combined_score < 0 else 'text-dark' }}">
+                        {{ entry.combined_score if entry.combined_score != 0 else 'E' }}
+                    </span>
+                    <i class="bi bi-chevron-down ms-2 text-muted"></i>
+                </div>
+            </div>
+
+            <div id="team-details-{{ entry.id }}" class="collapse">
+                <div class="p-3 bg-white border-top">
+                    <h6 class="text-uppercase text-muted small fw-bold mb-3">Roster & Player Performance</h6>
+                    <div class="row g-3">
+                        {% for g in entry.golfers %}
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-body d-flex align-items-center p-2">
+                                    <div class="position-relative">
+                                        <img src="{{ g.headshot_url or 'https://a.espncdn.com/combiner/i?img=/i/headshots/golf/players/full/default.png' }}"
+                                             alt="{{ g.name }}"
+                                             class="rounded-circle border"
+                                             style="width: 55px; height: 55px; object-fit: cover; background: #fff;">
+                                    </div>
+                                    <div class="ms-3 flex-grow-1">
+                                        <div class="fw-bold text-truncate" style="max-width: 120px;">{{ g.name }}</div>
+                                        <div class="d-flex align-items-center mt-1">
+                                            <span class="badge {{ 'bg-danger' if g.current_total > 0 else 'bg-primary' if g.current_total < 0 else 'bg-secondary' }} me-2">
+                                                {{ g.current_total if g.current_total != 0 else 'E' }}
+                                            </span>
+                                            <small class="text-muted">OWGR: #{{ g.world_rank }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if not entries %}
+    <div class="text-center py-5">
+        <p class="text-muted fs-5">No teams have joined this league yet.</p>
+        <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-success">Back to Dashboard</a>
+    </div>
+    {% endif %}
 </div>
+
+<style>
+    .collapse { transition: all 0.35s ease; }
+    .list-group-item:hover { border-left: 5px solid #198754 !important; transition: border 0.1s; }
+    .card:hover { transform: translateY(-2px); transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+</style>
 {% endblock %}
