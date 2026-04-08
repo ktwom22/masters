@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Contact the Clubhouse | Masters Draft 2026{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-lg masters-border">
+                <div class="card-body p-5">
+                    <h1 class="mb-4">Contact the Clubhouse</h1>
+                    <p class="text-muted mb-4">Have questions about your league, scoring, or the 2026 tournament? Drop us a line below.</p>
+                    
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Your Name</label>
+                                <input type="text" name="name" class="form-control" placeholder="Bobby Jones" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Email Address</label>
+                                <input type="email" name="email" class="form-control" placeholder="name@example.com" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Subject</label>
+                            <select name="subject" class="form-select">
+                                <option value="League Issue">League / Draft Issue</option>
+                                <option value="Scoring Question">Scoring Question</option>
+                                <option value="Partnership">Partnership Inquiry</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Message</label>
+                            <textarea name="message" class="form-control" rows="5" placeholder="How can we help?" required></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 py-3">Send Message →</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4">
+                <p class="text-muted small">Response time is typically within 4 hours during tournament play.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

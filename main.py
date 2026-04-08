@@ -413,6 +413,35 @@ def golfer_detail(espn_id):
                            owners=owners)
 
 
+@app.route('/contact', methods=['GET', 'POST'])
+def contact():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        user_email = request.form.get('email')
+        subject = request.form.get('subject')
+        message = request.form.get('message')
+
+        try:
+            resend.Emails.send({
+                "from": "Masters Draft <onboarding@resend.dev>",
+                "to": ["ktwom22s@gmail.com"],  # REPLACE WITH YOUR GMAIL
+                "subject": f"Contact Form: {subject}",
+                "reply_to": user_email,
+                "html": f"""
+                    <h3>New Message from {name}</h3>
+                    <p><strong>Email:</strong> {user_email}</p>
+                    <p><strong>Message:</strong></p>
+                    <p>{message}</p>
+                """
+            })
+            flash("Message sent successfully! We'll get back to you soon.")
+        except Exception as e:
+            flash(f"Error sending message: {str(e)}")
+
+        return redirect(url_for('contact'))
+
+    return render_template('contact.html')
+
 # --- TECHNICAL SEO: DYNAMIC SITEMAP ---
 
 @app.route('/sitemap.xml')
