@@ -96,7 +96,7 @@ def index():
 
         if action == 'create':
             name = request.form.get('league_name')
-            # Fixed: Properly captures max_size from the form on index
+            # Capturing max_size directly from the index form
             size = int(request.form.get('max_size', 10))
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -167,24 +167,30 @@ def forgot_password():
         if user:
             token = serializer.dumps(email, salt='pw-reset-token')
             link = url_for('reset_token', token=token, _external=True)
-            resend.Emails.send({
-                "from": "Masters Draft <onboarding@resend.dev>",
-                "to": [email],
-                "subject": "⛳ Password Reset Request",
-                "html": f"""
-                <div style="font-family: sans-serif; padding: 20px; border-top: 5px solid #006747;">
-                    <h2>Clubhouse Recovery</h2>
-                    <p>Click the link below to reset your tournament credentials:</p>
-                    <a href="{link}" style="background-color: #006747; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
-                    <p style="margin-top: 20px; font-size: 12px; color: #666;">This link expires in 30 minutes.</p>
-                </div>
-                """
-            })
-            flash("Check your inbox for a recovery link.")
+
+            try:
+                resend.Emails.send({
+                    "from": "Masters Draft <onboarding@resend.dev>",
+                    "to": [email],
+                    "subject": "⛳ Password Reset Request",
+                    "html": f"""
+                    <div style="font-family: sans-serif; padding: 20px; border-top: 5px solid #006747;">
+                        <h2>Clubhouse Recovery</h2>
+                        <p>You requested a password reset for your Masters 2026 account.</p>
+                        <p>Click the button below to set a new password:</p>
+                        <a href="{link}" style="background-color: #006747; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
+                        <p style="margin-top: 20px; font-size: 12px; color: #666;">This link will expire in 30 minutes. If you didn't request this, you can ignore this email.</p>
+                    </div>
+                    """
+                })
+                flash("Check your inbox for a recovery link.")
+            except Exception as e:
+                flash("Error sending email via Resend API.")
         else:
             flash("If an account exists, a link has been sent.")
         return redirect(url_for('login'))
-    return render_template('forgot_password_request.html')
+
+    return render_template('forgot_password.html')
 
 
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
@@ -204,43 +210,7 @@ def reset_token(token):
     return render_template('reset_with_token.html')
 
 
-# --- LEAGUE SYSTEM ---
-
-@app.route('/leagues')
-@login_required
-def leagues_dashboard():
-    return render_template('leagues.html', entries=current_user.entries)
-
-
-@app.route('/leagues/create', methods=['POST'])
-@login_required
-def create_league():
-    name = request.form.get('league_name')
-    size = int(request.form.get('max_size', 10))
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
-    db.session.add(new_league)
-    db.session.flush()
-    display_name = current_user.username.split('@')[0]
-    new_entry = Entry(team_name=f"{display_name}'s Team", user_id=current_user.id, league_id=new_league.id)
-    db.session.add(new_entry)
-    db.session.commit()
-    return redirect(url_for('index'))
-
-
-@app.route('/leagues/join', methods=['POST'])
-@login_required
-def join_league():
-    code = request.form.get('invite_code').upper()
-    league = League.query.filter_by(invite_code=code).first()
-    if not league or len(league.entries) >= league.max_size:
-        flash("League full or invalid code.")
-        return redirect(url_for('index'))
-    new_entry = Entry(team_name=request.form.get('team_name'), user_id=current_user.id, league_id=league.id)
-    db.session.add(new_entry)
-    db.session.commit()
-    return redirect(url_for('index'))
-
+# --- LEAGUE MANAGEMENT ---
 
 @app.route('/leagues/<int:league_id>/start', methods=['POST'])
 @login_required
@@ -267,7 +237,7 @@ def draft_page(league_id):
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
-    # Tournament pick rule (7 golfers)
+    # Rule: 7 golfers per team
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
@@ -301,7 +271,7 @@ def leaderboard(league_id):
     return render_template('leaderboard.html', league=league, entries=sorted_entries)
 
 
-# --- ADMIN ---
+# --- ADMIN CONTROLS ---
 
 @app.route('/admin_gate/<string:secret>')
 @login_required
@@ -346,20 +316,6 @@ def sync_espn():
                         world_rank_val = r.get('rank', 999)
                         break
 
-            if world_rank_val == 999:
-                stats = p.get('statistics', [])
-                for s in stats:
-                    if s.get('name') == 'worldRank':
-                        world_rank_val = s.get('value', 999)
-
-            if world_rank_val == 999:
-                pos = p.get('rank') or p.get('curRank')
-                if pos:
-                    try:
-                        world_rank_val = int(str(pos).replace('T', '').strip())
-                    except:
-                        pass
-
             g.world_rank = world_rank_val
             g.headshot_url = athlete.get('headshot', {}).get('href')
 
@@ -382,7 +338,7 @@ def sync_espn():
     return redirect(url_for('admin_panel'))
 
 
-# --- CRITICAL RAILWAY INIT ---
+# --- SYSTEM INITIALIZATION ---
 with app.app_context():
     try:
         db.create_all()

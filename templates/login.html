@@ -1,22 +1,53 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div style="max-width: 400px; margin: auto;">
-    <h1>Login</h1>
-    <p>Sign in to manage your Masters team.</p>
-    
-    <form method="POST">
-        <label>Username</label>
-        <input type="text" name="username" placeholder="Username" required>
-        
-        <label>Password</label>
-        <input type="password" name="password" placeholder="Password" required>
-        
-        <button type="submit" class="btn" style="width: 100%;">Sign In</button>
-    </form>
-    
-    <p style="margin-top: 20px; font-size: 0.9rem;">
-        Don't have a team? <a href="/signup">Sign up here</a>.
-    </p>
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-success text-white text-center py-4">
+                    <h3 class="fw-bold mb-0">⛳ Clubhouse Login</h3>
+                    <p class="small mb-0 opacity-75">Masters Draft 2026</p>
+                </div>
+                <div class="card-body p-4">
+
+                    {% with messages = get_flashed_messages() %}
+                      {% if messages %}
+                        {% for message in messages %}
+                          <div class="alert alert-danger small py-2">{{ message }}</div>
+                        {% endfor %}
+                      {% endif %}
+                    {% endwith %}
+
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">Email Address</label>
+                            <input type="email" name="username" class="form-control form-control-lg" placeholder="name@example.com" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <label class="form-label fw-bold small">Password</label>
+                                <a href="{{ url_for('forgot_password') }}" class="text-success small text-decoration-none">Forgot?</a>
+                            </div>
+                            <input type="password" name="password" class="form-control form-control-lg" placeholder="••••••••" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 fw-bold py-2 shadow-sm">
+                            Enter the Tournament
+                        </button>
+                    </form>
+
+                </div>
+                <div class="card-footer bg-light text-center py-3 border-0">
+                    <p class="small mb-0">New to the draft? <a href="{{ url_for('signup') }}" class="text-success fw-bold text-decoration-none">Create an Account</a></p>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <p class="text-muted small">© 2026 Masters Fantasy Draft</p>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
