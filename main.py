@@ -97,7 +97,6 @@ def index():
 
         if action == 'create':
             name = request.form.get('league_name')
-            # CAPTURING LEAGUE SIZE
             size = int(request.form.get('max_size', 10))
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -136,7 +135,6 @@ def signup():
         db.session.add(new_user)
         db.session.flush()
 
-        # AUTO-JOIN GLOBAL LEAGUE LOGIC
         global_league = League.query.filter_by(is_global=True).first()
         if not global_league:
             global_league = League(name="2026 Global Tournament", invite_code="MASTERS", max_size=5000, is_global=True)
@@ -185,19 +183,11 @@ def forgot_password():
                     "from": "Masters Draft <onboarding@resend.dev>",
                     "to": [email],
                     "subject": "⛳ Password Reset Request",
-                    "html": f"""
-                    <div style="font-family: sans-serif; padding: 20px; border-top: 5px solid #006747;">
-                        <h2>Clubhouse Recovery</h2>
-                        <p>Click the button below to set a new password:</p>
-                        <a href="{link}" style="background-color: #006747; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-                    </div>
-                    """
+                    "html": f"<p>Reset link: <a href='{link}'>Click here to reset your password</a></p>"
                 })
                 flash("Check your inbox for a recovery link.")
-            except Exception as e:
+            except:
                 flash("Error sending email.")
-        else:
-            flash("If an account exists, a link has been sent.")
         return redirect(url_for('login'))
     return render_template('forgot_password.html')
 
@@ -214,24 +204,17 @@ def reset_token(token):
         user = User.query.filter_by(username=email).first()
         user.password = generate_password_hash(request.form['password'], method='pbkdf2:sha256')
         db.session.commit()
-        flash("Password updated! Log in to continue.")
+        flash("Password updated!")
         return redirect(url_for('login'))
     return render_template('reset_with_token.html')
 
 
 # --- LEAGUE SYSTEM ---
 
-@app.route('/leagues')
-@login_required
-def leagues_dashboard():
-    return redirect(url_for('index'))
-
-
 @app.route('/leagues/create', methods=['POST'])
 @login_required
 def create_league():
     name = request.form.get('league_name')
-    # CAPTURING LEAGUE SIZE HERE TOO
     size = int(request.form.get('max_size', 10))
     code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
     new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -244,33 +227,20 @@ def create_league():
     return redirect(url_for('index'))
 
 
-@app.route('/leagues/join', methods=['POST'])
-@login_required
-def join_league():
-    code = request.form.get('invite_code').upper()
-    league = League.query.filter_by(invite_code=code).first()
-    if not league or len(league.entries) >= league.max_size:
-        flash("League full or invalid code.")
-        return redirect(url_for('index'))
-    new_entry = Entry(team_name=request.form.get('team_name'), user_id=current_user.id, league_id=league.id)
-    db.session.add(new_entry)
-    db.session.commit()
-    return redirect(url_for('index'))
+# --- NUKE & PAVE (EMERGENCY RESET) ---
 
-
-@app.route('/leagues/<int:league_id>/start', methods=['POST'])
-@login_required
-def start_draft(league_id):
-    league = db.session.get(League, league_id)
-    if league.creator_id != current_user.id: abort(403)
-    entries = league.entries
-    random.shuffle(entries)
-    for idx, entry in enumerate(entries):
-        entry.draft_order = idx
-    league.status = 'drafting'
-    db.session.commit()
-    flash("The Tournament Draft has begun!")
-    return redirect(url_for('draft_page', league_id=league.id))
+@app.route('/admin/nuke/<string:secret>')
+def nuke_and_pave(secret):
+    if secret != 'masters2026':
+        abort(403)
+    try:
+        db.drop_all()
+        db.create_all()
+        logout_user()
+        flash("Database wiped and schema updated. Please sign up again.")
+        return redirect(url_for('signup'))
+    except Exception as e:
+        return f"Nuke failed: {e}"
 
 
 # --- DRAFTING & LEADERBOARD ---
@@ -293,9 +263,7 @@ def draft_page(league_id):
     turn_entry = entries[pick_idx] if curr_round % 2 != 0 else entries[num_teams - 1 - pick_idx]
 
     if request.method == 'POST':
-        if current_user.id != turn_entry.user_id:
-            flash("Not your turn.")
-        else:
+        if current_user.id == turn_entry.user_id:
             golfer = db.session.get(Golfer, request.form.get('golfer_id'))
             already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
             if golfer and not already_taken:
@@ -316,24 +284,7 @@ def leaderboard(league_id):
     return render_template('leaderboard.html', league=league, entries=sorted_entries)
 
 
-# --- ADMIN ---
-
-@app.route('/admin_gate/<string:secret>')
-@login_required
-def admin_gate(secret):
-    if secret == 'masters2026':
-        current_user.is_admin = True
-        db.session.commit()
-        return redirect(url_for('admin_panel'))
-    abort(403)
-
-
-@app.route('/admin')
-@login_required
-def admin_panel():
-    if not current_user.is_admin: abort(403)
-    return render_template('admin.html')
-
+# --- ADMIN SYNC ---
 
 @app.route('/admin/sync', methods=['POST'])
 @login_required
@@ -350,31 +301,16 @@ def sync_espn():
             if not g:
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
-
-            # IMPROVED RANKING LOGIC
-            world_rank_val = 999
-            if 'rankings' in athlete and athlete['rankings']:
-                world_rank_val = athlete['rankings'][0].get('rank', 999)
-
-            g.world_rank = world_rank_val
+            g.world_rank = athlete.get('rankings', [{}])[0].get('rank', 999)
             g.headshot_url = athlete.get('headshot', {}).get('href')
-
             score_data = p.get('score', '0')
             score_str = str(score_data.get('value', '0')) if isinstance(score_data, dict) else str(score_data)
-
-            if score_str.upper() == 'E' or score_str == 'None':
-                g.api_score = 0
-            else:
-                try:
-                    g.api_score = int(score_str)
-                except:
-                    g.api_score = 0
+            g.api_score = int(score_str) if score_str.lstrip('-').isdigit() else 0
         db.session.commit()
-        flash("Masters data synced successfully.")
-    except Exception as e:
+        flash("Synced!")
+    except:
         db.session.rollback()
-        flash(f"Sync failed: {e}")
-    return redirect(url_for('admin_panel'))
+    return redirect(url_for('index'))
 
 
 # --- CRITICAL RAILWAY INIT ---
