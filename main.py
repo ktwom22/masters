@@ -30,6 +30,7 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.co
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
 
+# --- INITIALIZATION (Must follow CONFIG) ---
 db = SQLAlchemy(app)
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
