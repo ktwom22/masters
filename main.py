@@ -302,12 +302,11 @@ def admin_panel():
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
-    # 2026 Masters Leaderboard Endpoint
+    # 2026 Masters Tournament ID
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
 
     try:
-        response = requests.get(url)
-        data = response.json()
+        data = requests.get(url).json()
         competitors = data['events'][0]['competitions'][0]['competitors']
 
         for p in competitors:
@@ -319,51 +318,52 @@ def sync_espn():
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
 
-            # --- THE 999 FIX: DEEP RANK SEARCH ---
-            # 1. Try Athlete Rankings (Official World Golf Ranking)
-            # Path: athlete -> rankings -> list -> rank
-            rank_found = 999
-            if 'rankings' in athlete and athlete['rankings']:
-                rank_found = athlete['rankings'][0].get('rank', 999)
+            # --- THE 999 FIX: FINDING WORLD RANKING ---
+            # Major Tournaments store World Ranking inside 'athlete' -> 'rankings'
+            world_rank_val = 999
 
-            # 2. If still 999, try the 'curRank' (Tournament Position)
-            if rank_found == 999:
-                pos = p.get('curRank') or p.get('rank')
-                if pos:
+            # 1. Check the official Rankings array for OWGR
+            rankings_list = athlete.get('rankings', [])
+            if rankings_list:
+                # The first entry in this list is almost always the OWGR
+                world_rank_val = rankings_list[0].get('rank', 999)
+
+            # 2. Fallback: If still 999, look for a "displayValue" rank
+            if world_rank_val == 999:
+                # Sometimes rank is a string like "1" or "T5"
+                raw_rank = p.get('rank') or p.get('curRank')
+                if raw_rank:
                     try:
-                        # Strip 'T' (Tied) and convert to int
-                        rank_found = int(str(pos).replace('T', '').strip())
+                        # Strip "T" and convert to integer
+                        world_rank_val = int(str(raw_rank).replace('T', '').strip())
                     except:
                         pass
 
-            g.world_rank = rank_found
+            g.world_rank = world_rank_val
 
             # --- HEADSHOT & SCORE ---
-            # Use the higher-res headshot if available
             g.headshot_url = athlete.get('headshot', {}).get('href')
 
-            raw_score = p.get('score', "0")
-            # Handle dictionary scores vs string scores
-            if isinstance(raw_score, dict):
-                score_val = raw_score.get('value', 0)
+            # Handle the Score (E = 0)
+            score_data = p.get('score', '0')
+            if isinstance(score_data, dict):
+                score_str = str(score_data.get('value', '0'))
             else:
-                score_val = raw_score
+                score_str = str(score_data)
 
-            # Convert "E" to 0, otherwise integer
-            if str(score_val).strip().upper() == "E" or score_val is None:
+            if score_str.upper() == 'E' or score_str == 'None':
                 g.api_score = 0
             else:
                 try:
-                    g.api_score = int(score_val)
+                    g.api_score = int(score_str)
                 except:
                     g.api_score = 0
 
         db.session.commit()
-        flash("Masters Sync Successful! World Rankings updated.")
+        flash("Masters data synced! Rankings are now accurate.")
     except Exception as e:
         db.session.rollback()
-        flash(f"Sync failed: {str(e)}")
-
+        flash(f"Sync failed: {e}")
     return redirect(url_for('admin_panel'))
 
 
