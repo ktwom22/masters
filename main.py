@@ -91,15 +91,23 @@ def load_user(user_id):
 
 @app.route('/')
 def index():
+    # Fetch all golfers and sort by their tournament score (api_score)
+    # Golfers with lower scores (more under par) appear at the top
+    pro_golfers = Golfer.query.order_by(Golfer.api_score.asc(), Golfer.world_rank.asc()).all()
+
+    league = None
+    entries = []
+
     if current_user.is_authenticated:
-        # Show leaderboard for the user's first league directly on the home page
         first_entry = Entry.query.filter_by(user_id=current_user.id).first()
         if first_entry:
             league = first_entry.league
-            sorted_entries = sorted(league.entries, key=lambda x: x.combined_score)
-            return render_template('index.html', league=league, entries=sorted_entries)
-        return render_template('index.html', entries=[])
-    return render_template('index.html')
+            entries = sorted(league.entries, key=lambda x: x.combined_score)
+
+    return render_template('index.html',
+                           pro_golfers=pro_golfers,
+                           league=league,
+                           entries=entries)
 
 
 @app.route('/signup', methods=['GET', 'POST'])

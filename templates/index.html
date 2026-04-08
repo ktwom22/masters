@@ -1,84 +1,82 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if not current_user.is_authenticated %}
 <div class="p-5 mb-4 bg-light rounded-3 text-center border mt-5 shadow-sm">
     <div class="container-fluid py-5">
         <h1 class="display-5 fw-bold text-success">⛳ Masters 2026 Draft Hub</h1>
-        <p class="col-md-12 fs-4">Create or join a league to start your championship journey at Augusta.</p>
-
-        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
-            <a href="{{ url_for('signup') }}" class="btn btn-success btn-lg px-4 gap-3">Register Now</a>
-            <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Login</a>
-        </div>
+        {% if not current_user.is_authenticated %}
+            <p class="col-md-12 fs-4">Join the tradition. Draft your team and track live scores from Augusta.</p>
+            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
+                <a href="{{ url_for('signup') }}" class="btn btn-success btn-lg px-4 gap-3">Register Now</a>
+                <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Login</a>
+            </div>
+        {% else %}
+            <p class="col-md-12 fs-4">Welcome back, {{ current_user.username.split('@')[0] }}!</p>
+            <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-success px-4">My Leagues</a>
+        {% endif %}
     </div>
 </div>
 
-<div class="row text-center mt-5 mb-5">
-    <div class="col-md-4">
-        <div class="p-3">
-            <i class="bi bi-trophy fs-1 text-success"></i>
-            <h3 class="mt-2">Step 1</h3>
-            <p>Create a league and invite your friends with a unique code.</p>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="p-3">
-            <i class="bi bi-person-lines-fill fs-1 text-success"></i>
-            <h3 class="mt-2">Step 2</h3>
-            <p>Participate in a live Snake Draft to build your roster.</p>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="p-3">
-            <i class="bi bi-graph-up-arrow fs-1 text-success"></i>
-            <h3 class="mt-2">Step 3</h3>
-            <p>Watch live scores sync from Augusta and climb the leaderboard.</p>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-{% if current_user.is_authenticated %}
-<div class="container mt-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 class="fw-bold">Welcome back, {{ current_user.username.split('@')[0] }}!</h1>
-            <p class="text-muted">Tracking your active Masters campaign.</p>
-        </div>
-        <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-outline-success">Manage Leagues</a>
-    </div>
-
-    {% if league %}
-    <div class="card shadow border-0 overflow-hidden">
-        <div class="card-header bg-success text-white py-3 d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">🏆 Live Leaderboard: {{ league.name }}</h4>
-            <span class="badge bg-light text-success">Live Updates Active</span>
-        </div>
+{% if current_user.is_authenticated and league %}
+<div class="container mb-5">
+    <h3 class="fw-bold mb-3">🏆 Your League: {{ league.name }}</h3>
+    <div class="card shadow-sm border-0">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-dark">
                     <tr>
                         <th class="ps-4">Rank</th>
                         <th>Team Name</th>
-                        <th>Manager</th>
                         <th class="text-center">Total Score</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for entry in entries %}
                     <tr class="{{ 'table-success' if entry.user_id == current_user.id else '' }}">
-                        <td class="ps-4 fw-bold">#{{ loop.index }}</td>
-                        <td>
-                            <span class="fw-bold">{{ entry.team_name }}</span>
-                            {% if entry.user_id == current_user.id %}
-                                <span class="badge bg-success ms-1">You</span>
-                            {% endif %}
+                        <td class="ps-4">#{{ loop.index }}</td>
+                        <td>{{ entry.team_name }}</td>
+                        <td class="text-center fw-bold">
+                            {{ entry.combined_score if entry.combined_score != 0 else 'E' }}
                         </td>
-                        <td>{{ entry.owner.username.split('@')[0] }}</td>
-                        <td class="text-center fw-bold fs-5">
-                            <span class="{{ 'text-danger' if entry.combined_score > 0 else 'text-primary' if entry.combined_score < 0 else 'text-dark' }}">
-                                {{ entry.combined_score if entry.combined_score != 0 else 'E' }}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="container mt-5 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="fw-bold text-success">Masters Field Standings</h2>
+        <span class="badge bg-danger">LIVE FROM AUGUSTA</span>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-success">
+                    <tr>
+                        <th class="ps-4">Player</th>
+                        <th class="text-center">World Rank</th>
+                        <th class="text-center">Current Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for g in pro_golfers %}
+                    <tr>
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <img src="{{ g.headshot_url }}" alt="{{ g.name }}"
+                                     style="width: 40px; height: 40px; border-radius: 50%; margin-right: 15px; background: #eee;">
+                                <span class="fw-bold">{{ g.name }}</span>
+                            </div>
+                        </td>
+                        <td class="text-center text-muted">#{{ g.world_rank }}</td>
+                        <td class="text-center fs-5 fw-bold">
+                            <span class="{{ 'text-danger' if g.api_score > 0 else 'text-primary' if g.api_score < 0 else 'text-dark' }}">
+                                {{ g.api_score if g.api_score != 0 else 'E' }}
                             </span>
                         </td>
                     </tr>
@@ -86,17 +84,7 @@
                 </tbody>
             </table>
         </div>
-        <div class="card-footer bg-white text-center py-2">
-            <small class="text-muted italic">Scores refresh every 60 seconds during tournament play.</small>
-        </div>
     </div>
-    {% else %}
-    <div class="text-center py-5 border rounded bg-light">
-        <h3>No Active Leagues</h3>
-        <p>You haven't joined any leagues for the 2026 Masters yet.</p>
-        <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-success">Create or Join a League</a>
-    </div>
-    {% endif %}
 </div>
 
 <script>
@@ -104,6 +92,4 @@
        window.location.reload(1);
     }, 60000);
 </script>
-{% endif %}
-
 {% endblock %}
