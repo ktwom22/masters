@@ -96,7 +96,6 @@ def index():
 
         if action == 'create':
             name = request.form.get('league_name')
-            # Capturing max_size directly from the index form
             size = int(request.form.get('max_size', 10))
             code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
             new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
@@ -124,7 +123,6 @@ def index():
 
     pro_golfers = Golfer.query.order_by(Golfer.api_score.asc(), Golfer.world_rank.asc()).all()
     user_entries = current_user.entries if current_user.is_authenticated else []
-
     return render_template('index.html', pro_golfers=pro_golfers, user_entries=user_entries)
 
 
@@ -167,7 +165,6 @@ def forgot_password():
         if user:
             token = serializer.dumps(email, salt='pw-reset-token')
             link = url_for('reset_token', token=token, _external=True)
-
             try:
                 resend.Emails.send({
                     "from": "Masters Draft <onboarding@resend.dev>",
@@ -179,17 +176,16 @@ def forgot_password():
                         <p>You requested a password reset for your Masters 2026 account.</p>
                         <p>Click the button below to set a new password:</p>
                         <a href="{link}" style="background-color: #006747; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-                        <p style="margin-top: 20px; font-size: 12px; color: #666;">This link will expire in 30 minutes. If you didn't request this, you can ignore this email.</p>
+                        <p style="margin-top: 20px; font-size: 12px; color: #666;">This link will expire in 30 minutes.</p>
                     </div>
                     """
                 })
                 flash("Check your inbox for a recovery link.")
             except Exception as e:
-                flash("Error sending email via Resend API.")
+                flash("Error sending email. Please try again later.")
         else:
             flash("If an account exists, a link has been sent.")
         return redirect(url_for('login'))
-
     return render_template('forgot_password.html')
 
 
@@ -210,7 +206,44 @@ def reset_token(token):
     return render_template('reset_with_token.html')
 
 
-# --- LEAGUE MANAGEMENT ---
+# --- LEAGUE SYSTEM ---
+
+@app.route('/leagues')
+@login_required
+def leagues_dashboard():
+    # Fix for base.html BuildError: Redirect old dashboard links to the new index dashboard
+    return redirect(url_for('index'))
+
+
+@app.route('/leagues/create', methods=['POST'])
+@login_required
+def create_league():
+    name = request.form.get('league_name')
+    size = int(request.form.get('max_size', 10))
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
+    db.session.add(new_league)
+    db.session.flush()
+    display_name = current_user.username.split('@')[0]
+    new_entry = Entry(team_name=f"{display_name}'s Team", user_id=current_user.id, league_id=new_league.id)
+    db.session.add(new_entry)
+    db.session.commit()
+    return redirect(url_for('index'))
+
+
+@app.route('/leagues/join', methods=['POST'])
+@login_required
+def join_league():
+    code = request.form.get('invite_code').upper()
+    league = League.query.filter_by(invite_code=code).first()
+    if not league or len(league.entries) >= league.max_size:
+        flash("League full or invalid code.")
+        return redirect(url_for('index'))
+    new_entry = Entry(team_name=request.form.get('team_name'), user_id=current_user.id, league_id=league.id)
+    db.session.add(new_entry)
+    db.session.commit()
+    return redirect(url_for('index'))
+
 
 @app.route('/leagues/<int:league_id>/start', methods=['POST'])
 @login_required
@@ -237,7 +270,6 @@ def draft_page(league_id):
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
 
-    # Rule: 7 golfers per team
     if total_picks >= (num_teams * 7):
         league.status = 'active'
         db.session.commit()
@@ -271,7 +303,7 @@ def leaderboard(league_id):
     return render_template('leaderboard.html', league=league, entries=sorted_entries)
 
 
-# --- ADMIN CONTROLS ---
+# --- ADMIN ---
 
 @app.route('/admin_gate/<string:secret>')
 @login_required
@@ -295,33 +327,26 @@ def admin_panel():
 def sync_espn():
     if not current_user.is_admin: abort(403)
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
-
     try:
         data = requests.get(url).json()
         competitors = data['events'][0]['competitions'][0]['competitors']
-
         for p in competitors:
             athlete = p['athlete']
             espn_id = str(p['id'])
-
             g = Golfer.query.filter_by(espn_id=espn_id).first()
             if not g:
                 g = Golfer(name=athlete['displayName'], espn_id=espn_id)
                 db.session.add(g)
-
             world_rank_val = 999
             if 'rankings' in athlete:
                 for r in athlete['rankings']:
                     if r.get('name') == 'world' or r.get('type') == 'world':
                         world_rank_val = r.get('rank', 999)
                         break
-
             g.world_rank = world_rank_val
             g.headshot_url = athlete.get('headshot', {}).get('href')
-
             score_data = p.get('score', '0')
             score_str = str(score_data.get('value', '0')) if isinstance(score_data, dict) else str(score_data)
-
             if score_str.upper() == 'E' or score_str == 'None':
                 g.api_score = 0
             else:
@@ -329,7 +354,6 @@ def sync_espn():
                     g.api_score = int(score_str)
                 except:
                     g.api_score = 0
-
         db.session.commit()
         flash("Masters data synced successfully.")
     except Exception as e:
@@ -338,7 +362,7 @@ def sync_espn():
     return redirect(url_for('admin_panel'))
 
 
-# --- SYSTEM INITIALIZATION ---
+# --- CRITICAL RAILWAY INIT ---
 with app.app_context():
     try:
         db.create_all()
