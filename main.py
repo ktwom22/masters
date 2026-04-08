@@ -26,9 +26,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22@gmail.com')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22@gmail.com')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
 
 db = SQLAlchemy(app)
 mail = Mail(app)
@@ -185,7 +185,8 @@ def forgot_password():
         user = User.query.filter_by(username=email).first()
         if user:
             token = serializer.dumps(email, salt='pw-reset-token')
-            link = url_for('reset_token', token=token, _external=True)
+            # FIX: Ensure url_for points to the correct function name 'reset_password_route'
+            link = url_for('reset_password_route', token=token, _external=True)
             try:
                 msg = Message("⛳ Password Reset Request", recipients=[email])
                 msg.body = f"Reset your password here: {link}"
@@ -194,24 +195,30 @@ def forgot_password():
                 flash("Recovery email sent.")
             except Exception as e:
                 flash(f"Email error: {str(e)}")
+        else:
+            flash("If that email exists in our system, a reset link has been sent.")
         return redirect(url_for('login'))
     return render_template('forgot_password.html')
 
 
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
-def reset_token(token):
+def reset_password_route(token):
     try:
         email = serializer.loads(token, salt='pw-reset-token', max_age=1800)
     except:
-        flash("Link expired.")
+        flash("The reset link is invalid or has expired.")
         return redirect(url_for('forgot_password'))
 
     if request.method == 'POST':
         user = User.query.filter_by(username=email).first()
-        user.password = generate_password_hash(request.form['password'], method='pbkdf2:sha256')
-        db.session.commit()
-        flash("Password updated!")
-        return redirect(url_for('login'))
+        if user:
+            user.password = generate_password_hash(request.form['password'], method='pbkdf2:sha256')
+            db.session.commit()
+            flash("Your password has been updated! You can now login.")
+            return redirect(url_for('login'))
+        else:
+            flash("User not found.")
+            return redirect(url_for('index'))
     return render_template('reset_with_token.html')
 
 
