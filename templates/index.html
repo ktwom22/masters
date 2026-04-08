@@ -1,81 +1,95 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="p-5 mb-4 bg-light rounded-3 text-center border mt-5 shadow-sm">
-    <div class="container-fluid py-5">
-        <h1 class="display-5 fw-bold text-success">⛳ Masters 2026 Draft Hub</h1>
-        {% if not current_user.is_authenticated %}
-            <p class="col-md-12 fs-4">Join the tradition. Draft your team and track live scores from Augusta.</p>
-            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
-                <a href="{{ url_for('signup') }}" class="btn btn-success btn-lg px-4 gap-3">Register Now</a>
-                <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">Login</a>
-            </div>
-        {% else %}
-            <p class="col-md-12 fs-4">Welcome back, {{ current_user.username.split('@')[0] }}!</p>
-            <a href="{{ url_for('leagues_dashboard') }}" class="btn btn-success px-4">My Leagues</a>
-        {% endif %}
+<div class="container mt-4">
+    <div class="p-5 mb-4 bg-dark text-white rounded-3 shadow">
+        <h1 class="display-5 fw-bold">⛳ Masters 2026 Dashboard</h1>
+        <p class="fs-4">Manage your leagues and track the field in real-time.</p>
     </div>
-</div>
 
-{% if current_user.is_authenticated and league %}
-<div class="container mb-5">
-    <h3 class="fw-bold mb-3">🏆 Your League: {{ league.name }}</h3>
-    <div class="card shadow-sm border-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th class="ps-4">Rank</th>
-                        <th>Team Name</th>
-                        <th class="text-center">Total Score</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for entry in entries %}
-                    <tr class="{{ 'table-success' if entry.user_id == current_user.id else '' }}">
-                        <td class="ps-4">#{{ loop.index }}</td>
-                        <td>{{ entry.team_name }}</td>
-                        <td class="text-center fw-bold">
-                            {{ entry.combined_score if entry.combined_score != 0 else 'E' }}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    {% if current_user.is_authenticated %}
+    <div class="row g-4 mb-5">
+        <div class="col-md-6">
+            <div class="card h-100 border-success">
+                <div class="card-body">
+                    <h5 class="card-title text-success">Create New League</h5>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="create">
+                        <div class="mb-3">
+                            <input type="text" name="league_name" class="form-control" placeholder="League Name" required>
+                        </div>
+                        <div class="mb-3">
+                            <input type="number" name="max_size" class="form-control" placeholder="Max Players (e.g. 10)" value="10">
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Start League</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100 border-primary">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">Join a League</h5>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="join">
+                        <div class="mb-3">
+                            <input type="text" name="invite_code" class="form-control" placeholder="6-Digit Invite Code" required>
+                        </div>
+                        <div class="mb-3">
+                            <input type="text" name="team_name" class="form-control" placeholder="Your Team Name" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Join Tournament</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
-</div>
-{% endif %}
 
-<div class="container mt-5 mb-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="fw-bold text-success">Masters Field Standings</h2>
-        <span class="badge bg-danger">LIVE FROM AUGUSTA</span>
+    <h3 class="fw-bold mb-3">Your Active Leagues</h3>
+    <div class="row row-cols-1 row-cols-md-3 g-4 mb-5">
+        {% for entry in user_entries %}
+        <div class="col">
+            {% set target_url = url_for('draft_page', league_id=entry.league.id) if entry.league.status == 'drafting' else url_for('leaderboard', league_id=entry.league.id) %}
+            <a href="{{ target_url }}" class="text-decoration-none">
+                <div class="card h-100 shadow-sm hover-shadow border-0 bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark mb-1">{{ entry.league.name }}</h5>
+                        <p class="badge {{ 'bg-warning text-dark' if entry.league.status == 'drafting' else 'bg-success' }}">
+                            {{ entry.league.status.upper() }}
+                        </p>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <small class="text-muted">Code: {{ entry.league.invite_code }}</small>
+                            <span class="text-success fw-bold">View →</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
     </div>
+    {% endif %}
 
-    <div class="card shadow-sm border-0">
+    <h2 class="fw-bold text-success mt-5">Masters Field Standings</h2>
+    <div class="card shadow-sm border-0 mb-5">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-success">
                     <tr>
                         <th class="ps-4">Player</th>
                         <th class="text-center">World Rank</th>
-                        <th class="text-center">Current Score</th>
+                        <th class="text-center">Score</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for g in pro_golfers %}
                     <tr>
                         <td class="ps-4">
-                            <div class="d-flex align-items-center">
-                                <img src="{{ g.headshot_url }}" alt="{{ g.name }}"
-                                     style="width: 40px; height: 40px; border-radius: 50%; margin-right: 15px; background: #eee;">
-                                <span class="fw-bold">{{ g.name }}</span>
-                            </div>
+                            <img src="{{ g.headshot_url }}" style="width: 35px; border-radius: 50%; margin-right: 10px;">
+                            <strong>{{ g.name }}</strong>
                         </td>
                         <td class="text-center text-muted">#{{ g.world_rank }}</td>
-                        <td class="text-center fs-5 fw-bold">
-                            <span class="{{ 'text-danger' if g.api_score > 0 else 'text-primary' if g.api_score < 0 else 'text-dark' }}">
+                        <td class="text-center fw-bold">
+                            <span class="{{ 'text-danger' if g.api_score > 0 else 'text-primary' if g.api_score < 0 else '' }}">
                                 {{ g.api_score if g.api_score != 0 else 'E' }}
                             </span>
                         </td>
@@ -87,9 +101,15 @@
     </div>
 </div>
 
+<style>
+    .hover-shadow:hover {
+        transform: translateY(-5px);
+        transition: all 0.3s ease;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+</style>
+
 <script>
-    setTimeout(function(){
-       window.location.reload(1);
-    }, 60000);
+    setTimeout(function(){ window.location.reload(1); }, 60000);
 </script>
 {% endblock %}

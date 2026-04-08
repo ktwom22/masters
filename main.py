@@ -89,26 +89,44 @@ def load_user(user_id):
 
 # --- AUTH & NAVIGATION ---
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    # Fetch all golfers and sort by their tournament score (api_score)
-    # Golfers with lower scores (more under par) appear at the top
+    # Handle Create/Join actions if the user is logged in
+    if current_user.is_authenticated and request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'create':
+            name = request.form.get('league_name')
+            size = int(request.form.get('max_size', 10))
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            new_league = League(name=name, invite_code=code, max_size=size, creator_id=current_user.id)
+            db.session.add(new_league)
+            db.session.flush()
+            new_entry = Entry(team_name=f"{current_user.username.split('@')[0]}'s Team",
+                              user_id=current_user.id, league_id=new_league.id)
+            db.session.add(new_entry)
+            db.session.commit()
+            flash(f"League '{name}' created!")
+            return redirect(url_for('index'))
+
+        elif action == 'join':
+            code = request.form.get('invite_code').upper()
+            league = League.query.filter_by(invite_code=code).first()
+            if league and len(league.entries) < league.max_size:
+                new_entry = Entry(team_name=request.form.get('team_name'),
+                                  user_id=current_user.id, league_id=league.id)
+                db.session.add(new_entry)
+                db.session.commit()
+                flash(f"Joined {league.name}!")
+            else:
+                flash("League full or invalid code.")
+            return redirect(url_for('index'))
+
+    # Data for the leaderboard/pro field
     pro_golfers = Golfer.query.order_by(Golfer.api_score.asc(), Golfer.world_rank.asc()).all()
+    user_entries = current_user.entries if current_user.is_authenticated else []
 
-    league = None
-    entries = []
-
-    if current_user.is_authenticated:
-        first_entry = Entry.query.filter_by(user_id=current_user.id).first()
-        if first_entry:
-            league = first_entry.league
-            entries = sorted(league.entries, key=lambda x: x.combined_score)
-
-    return render_template('index.html',
-                           pro_golfers=pro_golfers,
-                           league=league,
-                           entries=entries)
-
+    return render_template('index.html', pro_golfers=pro_golfers, user_entries=user_entries)
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
