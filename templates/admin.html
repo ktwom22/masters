@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div style="max-width: 800px; margin: auto; font-family: sans-serif;">
+<div style="max-width: 800px; margin: auto; font-family: sans-serif; padding-bottom: 50px;">
     <h1 style="color: #00703c;">Tournament Control Center</h1>
     <hr>
 
@@ -58,8 +58,31 @@
         </form>
     </div>
 
+    <div style="background: #fce4ec; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #d81b60;">
+        <h3 style="color: #d81b60;">4. Finalize Draft & Go Live</h3>
+        <p>Once rosters are set, use this to end the draft mode and enable the Leaderboard.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            {% for l in leagues %}
+                <div style="background: white; border: 1px solid #ddd; padding: 15px; border-radius: 8px; flex: 1; min-width: 250px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>{{ l.name }}</strong><br>
+                        <small>Status: {{ l.status }}</small>
+                    </div>
+                    {% if l.status != 'active' %}
+                        <a href="/admin/activate/{{ l.id }}" style="background: #d81b60; color: white; padding: 8px 12px; text-decoration: none; border-radius: 5px; font-size: 0.9em;">
+                           Force Active
+                        </a>
+                    {% else %}
+                        <span style="color: #00703c; font-weight: bold;">LIVE ✓</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
     <div style="background: #fff; border: 1px solid #ddd; padding: 25px; border-radius: 12px;">
-        <h3>4. Manual Scoring Overrides</h3>
+        <h3>5. Manual Scoring Overrides</h3>
+        <p class="text-muted">Directly edit a golfer's score if the API is lagging.</p>
         <form action="/admin/manual" method="POST">
             <select name="golfer_id" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
                 {% for golfer in golfers %}
@@ -67,7 +90,9 @@
                 {% endfor %}
             </select>
             <input type="number" name="score" placeholder="Score relative to par (e.g. -5)" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
-            <button type="submit" class="btn" style="width: 100%; padding: 10px;">Apply Score</button>
+            <button type="submit" class="btn" style="width: 100%; padding: 10px; background: #333; color: white; border: none; border-radius: 5px;">
+                Apply Score Override
+            </button>
         </form>
     </div>
 </div>

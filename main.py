@@ -485,6 +485,16 @@ def robots_txt():
     response.headers["Content-Type"] = "text/plain"
     return response
 
+@app.route('/admin/activate/<int:league_id>')
+@login_required
+def activate_league(league_id):
+    if not current_user.is_admin: abort(403)
+    league = db.session.get(League, league_id)
+    if league:
+        league.status = 'active'
+        db.session.commit()
+        flash(f"{league.name} is now LIVE!")
+    return redirect(url_for('admin_panel'))
 
 with app.app_context():
     try:
