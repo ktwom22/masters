@@ -1,20 +1,65 @@
 {% extends "base.html" %}
 {% block content %}
-<div style="max-width: 800px; margin: auto;">
-    <h1>Tournament Control Center</h1>
+<div style="max-width: 800px; margin: auto; font-family: sans-serif;">
+    <h1 style="color: #00703c;">Tournament Control Center</h1>
     <hr>
 
-    <div style="background: #e8f5e9; padding: 25px; border-radius: 12px; margin-bottom: 30px; border-left: 5px solid #00703c;">
+    <div style="background: #e8f5e9; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #00703c;">
         <h3>1. Live Data Sync</h3>
-        <p>Pull the latest field (91+ players), world rankings, and tournament scores from ESPN.</p>
+        <p>Pull the latest field, world rankings, and tournament scores from ESPN.</p>
         <form action="/admin/sync" method="POST">
-            <button type="submit" class="btn" style="background: #00703c;">Sync 2026 Masters Data</button>
+            <button type="submit" class="btn" style="background: #00703c; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+                Sync 2026 Masters Data
+            </button>
+        </form>
+    </div>
+
+    <div style="background: #f1f8ff; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #0366d6;">
+        <h3>2. Create Missing User</h3>
+        <p>Manually add the 4th user who couldn't join.</p>
+        <form action="/admin/create_user" method="POST">
+            <input type="text" name="username" placeholder="Email/Username" required style="padding: 10px; width: 45%; margin-right: 2%;">
+            <input type="password" name="password" placeholder="Password" required style="padding: 10px; width: 45%;">
+            <button type="submit" class="btn" style="background: #0366d6; color: white; width: 100%; margin-top: 10px; padding: 10px; border: none; border-radius: 5px;">
+                Create User
+            </button>
+        </form>
+    </div>
+
+    <div style="background: #fff3e0; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #ef6c00;">
+        <h3>3. Manual Roster Builder</h3>
+        <p>Force assign 7 players to a user to fix the draft bug.</p>
+        <form action="/admin/manual_assign" method="POST">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <select name="user_id" required style="padding: 10px; flex: 1;">
+                    <option value="" disabled selected>Select User</option>
+                    {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+                <select name="league_id" required style="padding: 10px; flex: 1;">
+                    <option value="" disabled selected>Select League</option>
+                    {% for l in leagues %}
+                        <option value="{{ l.id }}">{{ l.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Select 7 Golfers (Hold Ctrl/Cmd to multi-select):</label>
+            <select name="golfer_ids" multiple required style="padding: 10px; width: 100%; height: 200px; margin-bottom: 10px;">
+                {% for golfer in golfers %}
+                    <option value="{{ golfer.id }}">[{{ golfer.world_rank }}] {{ golfer.name }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="btn" style="background: #ef6c00; color: white; width: 100%; padding: 10px; border: none; border-radius: 5px;">
+                Confirm Roster Assignment
+            </button>
         </form>
     </div>
 
     <div style="background: #fff; border: 1px solid #ddd; padding: 25px; border-radius: 12px;">
-        <h3>2. Manual Scoring Overrides</h3>
-        <p>Manually set a score if the API is delayed.</p>
+        <h3>4. Manual Scoring Overrides</h3>
         <form action="/admin/manual" method="POST">
             <select name="golfer_id" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
                 {% for golfer in golfers %}
@@ -22,7 +67,7 @@
                 {% endfor %}
             </select>
             <input type="number" name="score" placeholder="Score relative to par (e.g. -5)" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
-            <button type="submit" class="btn" style="width: 100%;">Apply Score</button>
+            <button type="submit" class="btn" style="width: 100%; padding: 10px;">Apply Score</button>
         </form>
     </div>
 </div>
