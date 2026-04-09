@@ -22,7 +22,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- FLASK-MAIL CONFIGURATION ---
-# Note: Use a Google App Password (16 characters) for MAIL_PASSWORD
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
@@ -30,7 +29,7 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.co
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
 
-# --- INITIALIZATION (Must follow CONFIG) ---
+# --- INITIALIZATION ---
 db = SQLAlchemy(app)
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
@@ -186,7 +185,6 @@ def forgot_password():
         user = User.query.filter_by(username=email).first()
         if user:
             token = serializer.dumps(email, salt='pw-reset-token')
-            # FIX: Ensure url_for points to the correct function name 'reset_password_route'
             link = url_for('reset_password_route', token=token, _external=True)
             try:
                 msg = Message("⛳ Password Reset Request", recipients=[email])
@@ -247,7 +245,60 @@ def create_league():
     return redirect(url_for('index'))
 
 
-# --- NUKE & PAVE (TOTAL SYSTEM RESET) ---
+# --- ADMIN MANUAL TOOLS & RECOVERY ---
+
+@app.route('/admin')
+@login_required
+def admin_panel():
+    if not current_user.is_admin: abort(403)
+    users = User.query.all()
+    leagues = League.query.all()
+    golfers = Golfer.query.order_by(Golfer.name).all()
+    return render_template('admin.html', users=users, leagues=leagues, golfers=golfers)
+
+
+@app.route('/admin/create_user', methods=['POST'])
+@login_required
+def admin_create_user():
+    if not current_user.is_admin: abort(403)
+    username = request.form.get('username')
+    password = request.form.get('password')
+    if User.query.filter_by(username=username).first():
+        flash("Username already exists.")
+        return redirect(url_for('admin_panel'))
+
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+    new_user = User(username=username, password=hashed_pw)
+    db.session.add(new_user)
+    db.session.commit()
+    flash(f"User {username} created successfully!")
+    return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/manual_assign', methods=['POST'])
+@login_required
+def manual_assign():
+    if not current_user.is_admin: abort(403)
+    user_id = request.form.get('user_id')
+    league_id = request.form.get('league_id')
+    golfer_ids = request.form.getlist('golfer_ids')
+
+    entry = Entry.query.filter_by(user_id=user_id, league_id=league_id).first()
+    if not entry:
+        entry = Entry(team_name="Manual Team", user_id=user_id, league_id=league_id)
+        db.session.add(entry)
+
+    # Overwrite the roster
+    entry.golfers = []
+    for g_id in golfer_ids[:7]:  # Hard limit of 7 golfers
+        golfer = db.session.get(Golfer, int(g_id))
+        if golfer:
+            entry.golfers.append(golfer)
+
+    db.session.commit()
+    flash("Roster manually updated for the user!")
+    return redirect(url_for('admin_panel'))
+
 
 @app.route('/admin/nuke/<string:secret>')
 def nuke_and_pave(secret):
@@ -285,37 +336,27 @@ def start_draft(league_id):
 @login_required
 def draft_page(league_id):
     league = db.session.get(League, league_id)
-
-    # Identify the user's entry for THIS league
     user_entry = Entry.query.filter_by(league_id=league_id, user_id=current_user.id).first()
     if not user_entry:
         abort(404)
 
-    # GLOBAL LEAGUE LOGIC (Pick-em style)
     if league.is_global:
         if request.method == 'POST':
             golfer_id = request.form.get('golfer_id')
             golfer = db.session.get(Golfer, golfer_id)
-
-            # Allow up to 7 golfers, and check if THIS specific user already has this golfer
             if len(user_entry.golfers) >= 7:
-                flash("Your team is full (7 golfers max).")
+                flash("Your team is full.")
             elif golfer in user_entry.golfers:
-                flash("You already picked this golfer.")
+                flash("Already picked.")
             elif golfer:
                 user_entry.golfers.append(golfer)
                 db.session.commit()
-                # Auto-complete global draft if they hit 7
-                if len(user_entry.golfers) == 7:
-                    flash("Global team complete!")
-                    return redirect(url_for('leaderboard', league_id=league.id))
             return redirect(url_for('draft_page', league_id=league.id))
 
-        # In Global, ALL golfers are available as long as they aren't on THIS user's team
         available = Golfer.query.order_by(Golfer.world_rank).all()
         return render_template('draft.html', league=league, team=user_entry, golfers=available, round="Global Pick")
 
-    # PRIVATE LEAGUE LOGIC (Snake Draft style)
+    # Private League Logic
     entries = Entry.query.filter_by(league_id=league_id).order_by(Entry.draft_order).all()
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
@@ -329,20 +370,14 @@ def draft_page(league_id):
     pick_idx = total_picks % num_teams
     turn_entry = entries[pick_idx] if curr_round % 2 != 0 else entries[num_teams - 1 - pick_idx]
 
-    if request.method == 'POST':
-        if current_user.id != turn_entry.user_id:
-            flash("Wait your turn!")
-        else:
-            golfer_id = request.form.get('golfer_id')
-            golfer = db.session.get(Golfer, golfer_id)
-            already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
-
-            if golfer and not already_taken:
-                turn_entry.golfers.append(golfer)
-                db.session.commit()
-                return redirect(url_for('draft_page', league_id=league_id))
-            else:
-                flash("Golfer already taken or invalid.")
+    if request.method == 'POST' and current_user.id == turn_entry.user_id:
+        golfer_id = request.form.get('golfer_id')
+        golfer = db.session.get(Golfer, golfer_id)
+        already_taken = any(g.id == golfer.id for e in league.entries for g in e.golfers)
+        if golfer and not already_taken:
+            turn_entry.golfers.append(golfer)
+            db.session.commit()
+            return redirect(url_for('draft_page', league_id=league_id))
 
     taken_ids = [g.id for e in league.entries for g in e.golfers]
     available = Golfer.query.filter(~Golfer.id.in_(taken_ids)).order_by(Golfer.world_rank).all()
@@ -369,123 +404,73 @@ def admin_gate(secret):
     abort(403)
 
 
-@app.route('/admin')
-@login_required
-def admin_panel():
-    if not current_user.is_admin: abort(403)
-    return render_template('admin.html')
-
-
 @app.route('/admin/sync', methods=['POST'])
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
-    # 1. Get Tournament Leaderboard
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
     try:
         data = requests.get(url).json()
         competitors = data['events'][0]['competitions'][0]['competitors']
-
         for p in competitors:
             athlete_data = p['athlete']
             espn_id = str(p['id'])
-
             g = Golfer.query.filter_by(espn_id=espn_id).first()
             if not g:
                 g = Golfer(name=athlete_data['displayName'], espn_id=espn_id)
                 db.session.add(g)
-
-            # Update live scores and headshots
             g.headshot_url = athlete_data.get('headshot', {}).get('href')
             score_val = p.get('score', {}).get('value', 0) if isinstance(p.get('score'), dict) else p.get('score', 0)
             g.api_score = int(score_val)
-
-            # 2. FETCH WORLD RANK (The Missing Link)
-            # We hit the specific Athlete endpoint to get their OWGR
+            # Fetch Rank
             try:
                 profile_url = f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/athletes/{espn_id}"
                 profile = requests.get(profile_url).json()
-                # Look for the 'World Golf Rank' in the stats/rankings array
                 ranks = profile.get('athlete', {}).get('rankings', [])
-                if ranks:
-                    # Usually the first entry in rankings for golf is OWGR
-                    g.world_rank = ranks[0].get('rank', 999)
+                if ranks: g.world_rank = ranks[0].get('rank', 999)
             except:
-                pass  # If profile fetch fails, keep current rank
+                pass
 
         db.session.commit()
-        flash("Full Sync Complete (Scores + World Ranks)!")
+        flash("Sync Complete!")
     except Exception as e:
         db.session.rollback()
         flash(f"Sync Error: {str(e)}")
-    return redirect(url_for('index'))
+    return redirect(url_for('admin_panel'))
 
 
-# --- PROGRAMMATIC SEO: PLAYER PAGES ---
+# --- SEO & PLAYER PAGES ---
 
 @app.route('/golfer/<string:espn_id>')
 def golfer_detail(espn_id):
     golfer = Golfer.query.filter_by(espn_id=espn_id).first_or_404()
-
-    # SEO logic: Create a dynamic title and description for this specific player
-    page_title = f"{golfer.name} - Masters 2026 Live Score & Draft Status"
-    page_desc = f"Track {golfer.name}'s live performance at Augusta National 2026. Current score: {golfer.api_score}. See which fantasy teams have drafted him."
-
-    # Find which entries in the Global League have this golfer
-    global_league = League.query.filter_by(is_global=True).first()
-    owners = []
-    if global_league:
-        owners = Entry.query.filter(Entry.league_id == global_league.id, Entry.golfers.contains(golfer)).all()
-
-    return render_template('golfer_detail.html',
-                           golfer=golfer,
-                           page_title=page_title,
-                           page_desc=page_desc,
-                           owners=owners)
+    page_title = f"{golfer.name} - Masters 2026 Status"
+    page_desc = f"Track {golfer.name}'s performance at Augusta 2026."
+    return render_template('golfer_detail.html', golfer=golfer, page_title=page_title, page_desc=page_desc)
 
 
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
     if request.method == 'POST':
-        name = request.form.get('name')
-        user_email = request.form.get('email')
-        subject = request.form.get('subject')
-        message_body = request.form.get('message')
-
         try:
-            msg = Message(
-                subject=f"Contact Form: {subject}",
-                recipients=['ktwom22s@gmail.com'], # Sent TO your gmail
-                reply_to=user_email,               # Reply goes TO the user
-                body=f"New message from {name} ({user_email}):\n\n{message_body}"
-            )
+            msg = Message(subject=request.form.get('subject'),
+                          recipients=['ktwom22s@gmail.com'],
+                          reply_to=request.form.get('email'),
+                          body=request.form.get('message'))
             mail.send(msg)
-            flash("Message sent successfully! We'll get back to you soon.")
+            flash("Message sent!")
         except Exception as e:
-            flash(f"Error sending message: {str(e)}")
-
+            flash(f"Error: {str(e)}")
         return redirect(url_for('contact'))
-
     return render_template('contact.html')
 
-# --- TECHNICAL SEO: DYNAMIC SITEMAP ---
 
 @app.route('/sitemap.xml')
 def sitemap():
-    """Generate a real-time sitemap for search engines."""
-    pages = []
-
-    # Add static pages
-    pages.append({'loc': url_for('index', _external=True), 'lastmod': '2026-04-07'})
-
-    # Add all golfer pages
+    pages = [{'loc': url_for('index', _external=True), 'lastmod': '2026-04-07'}]
     golfers = Golfer.query.all()
     for g in golfers:
-        pages.append({
-            'loc': url_for('golfer_detail', espn_id=g.espn_id, _external=True),
-            'lastmod': '2026-04-07'
-        })
-
+        pages.append({'loc': url_for('golfer_detail', espn_id=g.espn_id, _external=True), 'lastmod': '2026-04-07'})
     sitemap_xml = render_template('sitemap_template.xml', pages=pages)
     response = make_response(sitemap_xml)
     response.headers["Content-Type"] = "application/xml"
@@ -494,14 +479,12 @@ def sitemap():
 
 @app.route('/robots.txt')
 def robots_txt():
-    # This tells Google they are allowed to crawl everything
-    # and points them specifically to your sitemap.
     sitemap_url = url_for('sitemap', _external=True)
-    content = f"User-agent: *\nAllow: /\nSitemap: {sitemap_url}"
-
+    content = f"User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: {sitemap_url}"
     response = make_response(content)
     response.headers["Content-Type"] = "text/plain"
     return response
+
 
 with app.app_context():
     try:
