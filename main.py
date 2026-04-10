@@ -76,6 +76,7 @@ class Golfer(db.Model):
 
     @property
     def current_total(self):
+        # Uses Manual Score (Relative to par) if set, otherwise API Score
         return self.manual_score if self.manual_score is not None else self.api_score
 
 
@@ -300,6 +301,21 @@ def manual_assign():
     return redirect(url_for('admin_panel'))
 
 
+@app.route('/admin/manual', methods=['POST'])
+@login_required
+def manual_score_override():
+    if not current_user.is_admin: abort(403)
+    golfer_id = request.form.get('golfer_id')
+    score = request.form.get('score')
+
+    golfer = db.session.get(Golfer, int(golfer_id))
+    if golfer:
+        golfer.manual_score = int(score)
+        db.session.commit()
+        flash(f"Manual score set for {golfer.name}")
+    return redirect(url_for('admin_panel'))
+
+
 @app.route('/admin/nuke/<string:secret>')
 def nuke_and_pave(secret):
     if secret != 'masters2026':
@@ -408,34 +424,47 @@ def admin_gate(secret):
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
+
+    # 2026 Masters Tournament ID
     url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
+
     try:
         data = requests.get(url).json()
         competitors = data['events'][0]['competitions'][0]['competitors']
+
         for p in competitors:
-            athlete_data = p['athlete']
             espn_id = str(p['id'])
+            athlete_data = p['athlete']
+
             g = Golfer.query.filter_by(espn_id=espn_id).first()
             if not g:
                 g = Golfer(name=athlete_data['displayName'], espn_id=espn_id)
                 db.session.add(g)
+
             g.headshot_url = athlete_data.get('headshot', {}).get('href')
-            score_val = p.get('score', {}).get('value', 0) if isinstance(p.get('score'), dict) else p.get('score', 0)
-            g.api_score = int(score_val)
-            # Fetch Rank
-            try:
-                profile_url = f"https://site.api.espn.com/apis/site/v2/sports/golf/pga/athletes/{espn_id}"
-                profile = requests.get(profile_url).json()
-                ranks = profile.get('athlete', {}).get('rankings', [])
-                if ranks: g.world_rank = ranks[0].get('rank', 999)
-            except:
-                pass
+
+            # --- THE FIX: DON'T USE 'score', USE 'scoreToPar' ---
+            # We loop through the statistics to find the cumulative tournament total
+            stats = p.get('statistics', [])
+            tournament_total = 0  # Default to even if not found
+
+            for s in stats:
+                if s.get('name') == 'scoreToPar':
+                    tournament_total = int(s.get('value', 0))
+                    break
+
+            g.api_score = tournament_total
+
+            # Update World Rank
+            # Note: ESPN rank is often nested or requires a separate hit
+            g.world_rank = p.get('curatedRank', {}).get('current', 999)
 
         db.session.commit()
-        flash("Sync Complete!")
+        flash("Tournament Totals (-/+) Synced Successfully!")
     except Exception as e:
         db.session.rollback()
         flash(f"Sync Error: {str(e)}")
+
     return redirect(url_for('admin_panel'))
 
 
@@ -485,6 +514,7 @@ def robots_txt():
     response.headers["Content-Type"] = "text/plain"
     return response
 
+
 @app.route('/admin/activate/<int:league_id>')
 @login_required
 def activate_league(league_id):
@@ -495,6 +525,50 @@ def activate_league(league_id):
         db.session.commit()
         flash(f"{league.name} is now LIVE!")
     return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/remove_golfer', methods=['POST'])
+@login_required
+def admin_remove_golfer():
+    if not current_user.is_admin: abort(403)
+    user_id = request.form.get('user_id')
+    league_id = request.form.get('league_id')
+    golfer_id = request.form.get('golfer_id')
+
+    entry = Entry.query.filter_by(user_id=user_id, league_id=league_id).first()
+    golfer = db.session.get(Golfer, int(golfer_id))
+
+    if entry and golfer in entry.golfers:
+        entry.golfers.remove(golfer)
+        db.session.commit()
+        flash(f"Removed {golfer.name} from team.")
+    else:
+        flash("Player not found on that team.")
+
+    return redirect(url_for('admin_panel'))
+
+
+@app.route('/admin/remove_user_from_league', methods=['POST'])
+@login_required
+def admin_remove_user_from_league():
+    if not current_user.is_admin: abort(403)
+    user_id = request.form.get('user_id')
+    league_id = request.form.get('league_id')
+
+    # Find the specific entry (the link between user and league)
+    entry = Entry.query.filter_by(user_id=user_id, league_id=league_id).first()
+
+    if entry:
+        # Clear the golfers from the entry first to be safe with the relationship table
+        entry.golfers = []
+        db.session.delete(entry)
+        db.session.commit()
+        flash("User successfully removed from the league.")
+    else:
+        flash("Entry not found.")
+
+    return redirect(url_for('admin_panel'))
+
 
 with app.app_context():
     try:

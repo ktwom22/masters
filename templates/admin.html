@@ -58,8 +58,64 @@
         </form>
     </div>
 
+    <div style="background: #fff; border: 1px solid #ffcdd2; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #b71c1c;">
+        <h3 style="color: #b71c1c;">4. Remove Player from Team</h3>
+        <p>If a team has the wrong player or too many players, remove them here.</p>
+        <form action="/admin/remove_golfer" method="POST">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <select name="user_id" required style="padding: 10px; flex: 1;">
+                    <option value="" disabled selected>Select User</option>
+                    {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+                <select name="league_id" required style="padding: 10px; flex: 1;">
+                    <option value="" disabled selected>Select League</option>
+                    {% for l in leagues %}
+                        <option value="{{ l.id }}">{{ l.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <select name="golfer_id" required style="padding: 10px; width: 100%; margin-bottom: 10px;">
+                <option value="" disabled selected>Select Player to Remove</option>
+                {% for g in golfers %}
+                    <option value="{{ g.id }}">{{ g.name }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="btn" style="background: #b71c1c; color: white; width: 100%; padding: 10px; border: none; border-radius: 5px; cursor: pointer;">
+                Delete Player from This Team
+            </button>
+        </form>
+    </div>
+
+    <div style="background: #fff; border: 1px solid #d32f2f; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #d32f2f;">
+        <h3 style="color: #d32f2f;">5. Remove User from League Entirely</h3>
+        <p>This deletes the user's team and all their picks from the selected league.</p>
+        <form action="/admin/remove_user_from_league" method="POST" onsubmit="return confirm('Are you sure you want to delete this user\'s entire team?');">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <select name="user_id" required style="padding: 10px; flex: 1;">
+                    <option value="" disabled selected>Select User to Kick</option>
+                    {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+                <select name="league_id" required style="padding: 10px; flex: 1;">
+                    <option value="" disabled selected>Select League</option>
+                    {% for l in leagues %}
+                        <option value="{{ l.id }}">{{ l.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn" style="background: #d32f2f; color: white; width: 100%; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                Delete Team & Kick User
+            </button>
+        </form>
+    </div>
+
     <div style="background: #fce4ec; padding: 25px; border-radius: 12px; margin-bottom: 20px; border-left: 5px solid #d81b60;">
-        <h3 style="color: #d81b60;">4. Finalize Draft & Go Live</h3>
+        <h3 style="color: #d81b60;">6. Finalize Draft & Go Live</h3>
         <p>Once rosters are set, use this to end the draft mode and enable the Leaderboard.</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px;">
             {% for l in leagues %}
@@ -81,7 +137,7 @@
     </div>
 
     <div style="background: #fff; border: 1px solid #ddd; padding: 25px; border-radius: 12px;">
-        <h3>5. Manual Scoring Overrides</h3>
+        <h3>7. Manual Scoring Overrides</h3>
         <p class="text-muted">Directly edit a golfer's score if the API is lagging.</p>
         <form action="/admin/manual" method="POST">
             <select name="golfer_id" required style="padding: 10px; width: 100%; margin-bottom: 10px;">

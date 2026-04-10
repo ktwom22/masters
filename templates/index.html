@@ -98,14 +98,15 @@
                     <tr>
                         <td class="ps-4">
                             {% if g.headshot_url %}
-                                <img src="{{ g.headshot_url }}" style="width: 35px; border-radius: 50%; margin-right: 10px;">
+                                <img src="{{ g.headshot_url }}" style="width: 35px; border-radius: 50%; margin-right: 10px; border: 1px solid #ddd;">
                             {% endif %}
                             <strong>{{ g.name }}</strong>
                         </td>
-                        <td class="text-center">#{{ g.world_rank }}</td>
-                        <td class="text-center fw-bold">
-                            <span class="{{ 'text-danger' if g.api_score > 0 else 'text-primary' if g.api_score < 0 else '' }}">
-                                {{ g.api_score if g.api_score != 0 else 'E' }}
+                        <td class="text-center text-muted">#{{ g.world_rank }}</td>
+                        <td class="text-center fw-bold" style="font-size: 1.1em;">
+                            {# Logic: Green for Negative, Red for Positive, Dark for Even #}
+                            <span style="color: {% if g.current_total < 0 %}#28a745{% elif g.current_total > 0 %}#dc3545{% else %}#333{% endif %};">
+                                {% if g.current_total > 0 %}+{% endif %}{{ g.current_total if g.current_total != 0 else 'E' }}
                             </span>
                         </td>
                     </tr>
