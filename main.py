@@ -2,12 +2,15 @@ import os
 import requests
 import random
 import string
+import time
+import atexit
 from flask import Flask, render_template, request, redirect, url_for, flash, abort, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from itsdangerous import URLSafeTimedSerializer
 from flask_mail import Mail, Message
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
@@ -76,7 +79,6 @@ class Golfer(db.Model):
 
     @property
     def current_total(self):
-        # Uses Manual Score (Relative to par) if set, otherwise API Score
         return self.manual_score if self.manual_score is not None else self.api_score
 
 
@@ -96,6 +98,57 @@ class Entry(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+
+# --- AUTOMATED SYNC LOGIC ---
+
+def run_sync_logic():
+    """Shared function for manual and automated syncs"""
+    url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
+    try:
+        data = requests.get(url).json()
+        competitors = data['events'][0]['competitions'][0]['competitors']
+
+        for p in competitors:
+            espn_id = str(p['id'])
+            athlete_data = p['athlete']
+
+            g = Golfer.query.filter_by(espn_id=espn_id).first()
+            if not g:
+                g = Golfer(name=athlete_data['displayName'], espn_id=espn_id)
+                db.session.add(g)
+
+            g.headshot_url = athlete_data.get('headshot', {}).get('href')
+
+            stats = p.get('statistics', [])
+            tournament_total = 0
+            for s in stats:
+                if s.get('name') == 'scoreToPar':
+                    tournament_total = int(s.get('value', 0))
+                    break
+
+            g.api_score = tournament_total
+            g.world_rank = p.get('curatedRank', {}).get('current', 999)
+
+        db.session.commit()
+        return True
+    except Exception as e:
+        db.session.rollback()
+        print(f"Sync Error: {str(e)}")
+        return False
+
+
+def scheduled_sync():
+    with app.app_context():
+        print("🕒 Running 15-minute background sync...")
+        run_sync_logic()
+
+
+# Initialize Scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=scheduled_sync, trigger="interval", minutes=15)
+scheduler.start()
+atexit.register(lambda: scheduler.shutdown())
 
 
 # --- AUTH & NAVIGATION ---
@@ -289,9 +342,8 @@ def manual_assign():
         entry = Entry(team_name="Manual Team", user_id=user_id, league_id=league_id)
         db.session.add(entry)
 
-    # Overwrite the roster
     entry.golfers = []
-    for g_id in golfer_ids[:7]:  # Hard limit of 7 golfers
+    for g_id in golfer_ids[:7]:
         golfer = db.session.get(Golfer, int(g_id))
         if golfer:
             entry.golfers.append(golfer)
@@ -372,7 +424,6 @@ def draft_page(league_id):
         available = Golfer.query.order_by(Golfer.world_rank).all()
         return render_template('draft.html', league=league, team=user_entry, golfers=available, round="Global Pick")
 
-    # Private League Logic
     entries = Entry.query.filter_by(league_id=league_id).order_by(Entry.draft_order).all()
     num_teams = len(entries)
     total_picks = db.session.query(rosters).join(Entry).filter(Entry.league_id == league_id).count()
@@ -424,47 +475,10 @@ def admin_gate(secret):
 @login_required
 def sync_espn():
     if not current_user.is_admin: abort(403)
-
-    # 2026 Masters Tournament ID
-    url = "https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard?event=401811941"
-
-    try:
-        data = requests.get(url).json()
-        competitors = data['events'][0]['competitions'][0]['competitors']
-
-        for p in competitors:
-            espn_id = str(p['id'])
-            athlete_data = p['athlete']
-
-            g = Golfer.query.filter_by(espn_id=espn_id).first()
-            if not g:
-                g = Golfer(name=athlete_data['displayName'], espn_id=espn_id)
-                db.session.add(g)
-
-            g.headshot_url = athlete_data.get('headshot', {}).get('href')
-
-            # --- THE FIX: DON'T USE 'score', USE 'scoreToPar' ---
-            # We loop through the statistics to find the cumulative tournament total
-            stats = p.get('statistics', [])
-            tournament_total = 0  # Default to even if not found
-
-            for s in stats:
-                if s.get('name') == 'scoreToPar':
-                    tournament_total = int(s.get('value', 0))
-                    break
-
-            g.api_score = tournament_total
-
-            # Update World Rank
-            # Note: ESPN rank is often nested or requires a separate hit
-            g.world_rank = p.get('curatedRank', {}).get('current', 999)
-
-        db.session.commit()
-        flash("Tournament Totals (-/+) Synced Successfully!")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"Sync Error: {str(e)}")
-
+    if run_sync_logic():
+        flash("Tournament Totals Synced Successfully!")
+    else:
+        flash("Sync failed. Check logs.")
     return redirect(url_for('admin_panel'))
 
 
@@ -555,11 +569,9 @@ def admin_remove_user_from_league():
     user_id = request.form.get('user_id')
     league_id = request.form.get('league_id')
 
-    # Find the specific entry (the link between user and league)
     entry = Entry.query.filter_by(user_id=user_id, league_id=league_id).first()
 
     if entry:
-        # Clear the golfers from the entry first to be safe with the relationship table
         entry.golfers = []
         db.session.delete(entry)
         db.session.commit()
