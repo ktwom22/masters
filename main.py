@@ -28,9 +28,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', 'ktwom22@gmail.com')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22s@gmail.com')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'ktwom22@gmail.com')
 
 # --- INITIALIZATION ---
 db = SQLAlchemy(app)
@@ -497,7 +497,7 @@ def contact():
     if request.method == 'POST':
         try:
             msg = Message(subject=request.form.get('subject'),
-                          recipients=['ktwom22s@gmail.com'],
+                          recipients=['ktwom22@gmail.com'],
                           reply_to=request.form.get('email'),
                           body=request.form.get('message'))
             mail.send(msg)
